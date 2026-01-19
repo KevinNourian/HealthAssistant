@@ -1,0 +1,17 @@
+{
+  "pdf_files": [
+    "data/COVID-19.pdf"
+  ],
+  "chroma_directory": "data/chroma_db",
+  "chunking": {
+    "chunk_size": 500,
+    "chunk_overlap": 50
+  },
+  "retriever": {
+    "k": 3
+  },
+  "llm": {
+    "model": "gpt-4o-mini",
+    "temperature": 0
+  }
+}
