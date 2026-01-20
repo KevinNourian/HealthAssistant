@@ -50,7 +50,7 @@ def rebuild_vectorstore():
     )
     
     print("\n" + "="*60)
-    print("✅ REBUILD COMPLETE!")
+    print("REBUILD COMPLETE!")
     print("="*60)
     print("\nYour vector store has been rebuilt and saved.")
     print("You can now run main.py to use the updated knowledge base.\n")

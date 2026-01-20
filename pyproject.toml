@@ -15,4 +15,5 @@ dependencies = [
     "pypdf>=3.17.0",
     "python-dotenv>=1.0.0",
     "serpapi>=0.1.5",
+    "streamlit>=1.30.0"
 ]

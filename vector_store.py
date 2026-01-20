@@ -30,7 +30,7 @@ def load_pdfs(pdf_paths: List[str]) -> List[Document]:
     
     for pdf_path in pdf_paths:
         if not os.path.exists(pdf_path):
-            print(f"⚠️  Warning: PDF not found: {pdf_path}")
+            print(f"Warning: PDF not found: {pdf_path}")
             continue
         
         try:
@@ -180,11 +180,11 @@ def get_or_create_vectorstore(
     
     # Try to load existing vector store
     if not force_recreate and vectorstore_exists(persist_directory):
-        print("📦 Loading existing vector store...")
+        print("Loading existing vector store...")
         return load_chroma_vectorstore(persist_directory, embeddings)
     
     # Create new vector store
-    print("🔨 Creating new vector store...")
+    print("Creating new vector store...")
     
     # Load PDFs
     docs = load_pdfs(pdf_paths)
