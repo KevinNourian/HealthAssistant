@@ -1,0 +1,17 @@
+{
+  "reminders": [
+    {
+      "text": "Dr. Domantaite",
+      "date": "2026-01-24",
+      "id": 0
+    }
+  ],
+  "journal_entries": [
+    {
+      "title": "Dr. Domantaite",
+      "date": "2026-01-24",
+      "entry": "I saw Dr. Domantaite. Everything is fine. ",
+      "timestamp": "2026-01-24 10:04:38"
+    }
+  ]
+}

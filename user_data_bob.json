@@ -1,0 +1,17 @@
+{
+  "reminders": [
+    {
+      "text": "Dr. Pirnazar",
+      "date": "2026-01-24",
+      "id": 0
+    }
+  ],
+  "journal_entries": [
+    {
+      "title": "Dr. Pirnazar",
+      "date": "2026-01-24",
+      "entry": "I saw Dr. Pirnazar today. Everything is fine. ",
+      "timestamp": "2026-01-24 10:08:16"
+    }
+  ]
+}

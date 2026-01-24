@@ -1,14 +1,17 @@
 # main.py
 
 """
-Health Assistant - Streamlit App
-Tabbed main interface with streamlined sidebar
+Health Assistant - Streamlit App with Authentication
+Multi-user app with login and user-specific data
 """
 
 import streamlit as st
+import streamlit_authenticator as stauth
 from dotenv import load_dotenv
 import os
 import json
+import yaml
+from yaml.loader import SafeLoader
 from datetime import datetime
 
 from langchain_openai import ChatOpenAI
@@ -78,6 +81,97 @@ st.markdown("""
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
+
+
+# -------------------------
+# Authentication Setup
+# -------------------------
+# Load credentials
+with open('credentials.yaml') as file:
+    config_auth = yaml.load(file, Loader=SafeLoader)
+
+# Create authenticator object
+authenticator = stauth.Authenticate(
+    config_auth['credentials'],
+    config_auth['cookie']['name'],
+    config_auth['cookie']['key'],
+    config_auth['cookie']['expiry_days']
+)
+
+
+# -------------------------
+# Login Page
+# -------------------------
+try:
+    # Try new API (streamlit-authenticator 0.3.0+)
+    authenticator.login(location='main', fields={'Form name': 'Login'})
+except TypeError:
+    # Fallback to old API
+    authenticator.login('Login', 'main')
+
+# Get authentication status from session state
+name = st.session_state.get("name")
+authentication_status = st.session_state.get("authentication_status")
+username = st.session_state.get("username")
+
+if authentication_status == False:
+    st.error('Username/password is incorrect')
+    st.stop()
+
+if authentication_status == None:
+    st.warning('Please enter your username and password')
+    st.info("""
+    **Demo Users:**
+    - Username: alice | Password: temp123
+    - Username: bob | Password: temp456
+    - Username: charlie | Password: temp789
+    """)
+    st.stop()
+
+
+# -------------------------
+# User is authenticated - Load their data
+# -------------------------
+
+# User-specific data file
+USER_DATA_FILE = f"user_data_{username}.json"
+
+
+def load_user_data():
+    """Load user-specific data from JSON file"""
+    if os.path.exists(USER_DATA_FILE):
+        with open(USER_DATA_FILE, 'r') as f:
+            return json.load(f)
+    return {
+        "reminders": [],
+        "journal_entries": []
+    }
+
+
+def save_user_data():
+    """Save user-specific data to JSON file"""
+    data = {
+        "reminders": st.session_state.reminders,
+        "journal_entries": st.session_state.journal_entries
+    }
+    with open(USER_DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+# Initialize session state with user data
+# IMPORTANT: Reload data if user has changed (fixes data isolation bug)
+if "current_user" not in st.session_state or st.session_state.current_user != username:
+    user_data = load_user_data()
+    st.session_state.reminders = user_data.get("reminders", [])
+    st.session_state.journal_entries = user_data.get("journal_entries", [])
+    st.session_state.current_user = username
+    st.session_state.answer = ""
+    st.session_state.sources = []
+
+if "answer" not in st.session_state:
+    st.session_state.answer = ""
+if "sources" not in st.session_state:
+    st.session_state.sources = []
 
 
 # -------------------------
@@ -221,24 +315,22 @@ Summary:"""
 
 
 # -------------------------
-# Initialize Session State
-# -------------------------
-if "answer" not in st.session_state:
-    st.session_state.answer = ""
-if "sources" not in st.session_state:
-    st.session_state.sources = []
-if "reminders" not in st.session_state:
-    st.session_state.reminders = []
-if "journal_entries" not in st.session_state:
-    st.session_state.journal_entries = []
-
-
-# -------------------------
-# SIDEBAR (STREAMLINED)
+# SIDEBAR
 # -------------------------
 with st.sidebar:
+    # User info and logout
+    st.write(f"### Welcome, {name}! 👋")
+    try:
+        # Try new API (streamlit-authenticator 0.3.0+)
+        authenticator.logout(location='sidebar', button_name='Logout')
+    except TypeError:
+        # Fallback to old API
+        authenticator.logout('Logout', 'sidebar')
+    
+    st.divider()
+    
     # ============================================
-    # HEALTH REMINDERS (NO CLEAR ALL BUTTON)
+    # HEALTH REMINDERS
     # ============================================
     st.header("⏰ Health Reminders")
     
@@ -246,7 +338,6 @@ with st.sidebar:
         reminder_text = st.text_input("Reminder", placeholder="Doctor visit", key="reminder_input")
         reminder_date = st.date_input("Date", key="reminder_date")
         
-        # Only Add button (no Clear All)
         add_reminder = st.form_submit_button("➕ Add", use_container_width=True)
         
         if add_reminder and reminder_text:
@@ -255,6 +346,7 @@ with st.sidebar:
                 "date": reminder_date.strftime("%Y-%m-%d"),
                 "id": len(st.session_state.reminders)
             })
+            save_user_data()  # Save to file
             st.success("✅ Reminder added!")
             st.rerun()
     
@@ -267,6 +359,7 @@ with st.sidebar:
             with col2:
                 if st.button("❌", key=f"delete_reminder_{i}"):
                     st.session_state.reminders.pop(i)
+                    save_user_data()  # Save to file
                     st.rerun()
     else:
         st.info("No active reminders")
@@ -274,7 +367,7 @@ with st.sidebar:
     st.divider()
     
     # ============================================
-    # KNOWLEDGE BASE (NO EXAMPLE QUESTIONS)
+    # KNOWLEDGE BASE
     # ============================================
     st.header("📚 Knowledge Base")
     
@@ -347,12 +440,12 @@ with st.sidebar:
 
 
 # -------------------------
-# MAIN CONTENT - BIGGER, BOLDER TABS
+# MAIN CONTENT - TABS
 # -------------------------
 
 st.title("Health Assistant App")
 
-# Create tabs with custom styling (made bigger and bolder via CSS above)
+# Create tabs
 tab1, tab2, tab3 = st.tabs(["Ask Health Question", "Summarize PDF", "Health Journal"])
 
 # ============================================
@@ -361,7 +454,6 @@ tab1, tab2, tab3 = st.tabs(["Ask Health Question", "Summarize PDF", "Health Jour
 with tab1:
     st.header("Ask a Health Question")
     
-    # Question input
     question = st.text_input(
         "Question",
         placeholder="Type your health question here...",
@@ -369,22 +461,17 @@ with tab1:
         label_visibility="collapsed"
     )
     
-    # Submit button
     if st.button("Submit", type="primary"):
         if question:
             with st.spinner("🔍 Searching for answer..."):
                 try:
-                    # Query RAG system
                     response = chain.invoke(question)
                     answer_text = response.content.strip()
                     
-                    # Check if answer was found in PDFs
                     if answer_text.lower() in ["i don't know.", "i don't know", "unknown"]:
-                        # Search web
                         web_results = serpapi_search(question)
                         
                         if web_results:
-                            # Combine web results
                             combined_answer = "Here's what I found from web search:\n\n"
                             for result in web_results:
                                 combined_answer += f"**{result['title']}**\n{result['snippet']}\n\n"
@@ -395,7 +482,6 @@ with tab1:
                             st.session_state.answer = "I don't have enough information to answer this question."
                             st.session_state.sources = []
                     else:
-                        # PDF answer
                         st.session_state.answer = answer_text
                         st.session_state.sources = [("Source", "PDF Knowledge Base")]
                     
@@ -405,18 +491,15 @@ with tab1:
         else:
             st.warning("Please enter a question")
     
-    # Display answer
     if st.session_state.answer:
         st.subheader("Answer:")
         
-        # Answer box
         st.markdown(f"""
         <div style="padding: 20px; background-color: #f0f2f6; border-radius: 10px; margin-top: 20px;">
             <p>{st.session_state.answer}</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Display sources
         if st.session_state.sources:
             st.write("")
             for source_label, source_url in st.session_state.sources:
@@ -455,23 +538,20 @@ with tab2:
 
 
 # ============================================
-# TAB 3: HEALTH JOURNAL (WITH TITLE FIELD)
+# TAB 3: HEALTH JOURNAL
 # ============================================
 with tab3:
     st.header("Health Journal")
     
-    # Add entry form with Title field
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        # Title field (NEW)
         journal_title = st.text_input(
             "Title",
             placeholder="Entry title...",
             key="journal_tab_title"
         )
         
-        # Entry field
         journal_entry_tab = st.text_area(
             "Journal Entry",
             placeholder="How are you feeling today?",
@@ -490,6 +570,7 @@ with tab3:
                     "entry": journal_entry_tab,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 })
+                save_user_data()  # Save to file
                 st.success("✅ Entry added!")
                 st.rerun()
             else:
@@ -497,12 +578,10 @@ with tab3:
     
     st.divider()
     
-    # Display entries with Title and Date
     if st.session_state.journal_entries:
         st.subheader("Journal Entries")
         
         for entry in reversed(st.session_state.journal_entries):
-            # Show Title and Date in expander header
             with st.expander(f"📅 {entry['date']} - {entry.get('title', 'Untitled')}"):
                 st.write(entry['entry'])
                 
@@ -511,6 +590,7 @@ with tab3:
                         if e['timestamp'] == entry['timestamp']:
                             st.session_state.journal_entries.pop(idx)
                             break
+                    save_user_data()  # Save to file
                     st.rerun()
     else:
         st.info("No journal entries yet.")
