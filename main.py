@@ -100,33 +100,37 @@ authenticator = stauth.Authenticate(
 
 
 # -------------------------
-# Login Page
+# Authentication Check
 # -------------------------
-try:
-    # Try new API (streamlit-authenticator 0.3.0+)
-    authenticator.login(location='main', fields={'Form name': 'Login'})
-except TypeError:
-    # Fallback to old API
-    authenticator.login('Login', 'main')
+# Check if user is already authenticated
+if "authentication_status" not in st.session_state or st.session_state["authentication_status"] != True:
+    # User not logged in - show login in sidebar
+    with st.sidebar:
+        st.title("🏥 Health Assistant")
+        st.markdown("### Login")
+        
+        # Show login form in sidebar
+        authenticator.login(location='sidebar')
+        
+        # Check authentication status
+        if st.session_state.get("authentication_status") == False:
+            st.error('Incorrect credentials')
+        elif st.session_state.get("authentication_status") == None:
+            st.info("**Demo:**\nalice/temp123\nbob/temp456")
+    
+    # If not authenticated, show message in main and stop
+    if st.session_state.get("authentication_status") != True:
+        st.title("Welcome to Health Assistant")
+        st.info("👈 Please login using the sidebar")
+        st.stop()
+    
+    # Just logged in - rerun to show app
+    st.rerun()
 
-# Get authentication status from session state
-name = st.session_state.get("name")
-authentication_status = st.session_state.get("authentication_status")
-username = st.session_state.get("username")
-
-if authentication_status == False:
-    st.error('Username/password is incorrect')
-    st.stop()
-
-if authentication_status == None:
-    st.warning('Please enter your username and password')
-    st.info("""
-    **Demo Users:**
-    - Username: alice | Password: temp123
-    - Username: bob | Password: temp456
-    - Username: charlie | Password: temp789
-    """)
-    st.stop()
+# User is authenticated
+name = st.session_state["name"]
+username = st.session_state["username"]
+authentication_status = st.session_state["authentication_status"]
 
 
 # -------------------------
@@ -167,11 +171,14 @@ if "current_user" not in st.session_state or st.session_state.current_user != us
     st.session_state.current_user = username
     st.session_state.answer = ""
     st.session_state.sources = []
+    st.session_state.file_uploader_key = 0  # For clearing file uploader
 
 if "answer" not in st.session_state:
     st.session_state.answer = ""
 if "sources" not in st.session_state:
     st.session_state.sources = []
+if "file_uploader_key" not in st.session_state:
+    st.session_state.file_uploader_key = 0
 
 
 # -------------------------
@@ -312,6 +319,15 @@ Summary:"""
         
     except Exception as e:
         return f"Error generating summary: {str(e)}"
+
+
+# -------------------------
+# ONLY CONTINUE IF AUTHENTICATED
+# -------------------------
+if authentication_status is not True:
+    # This should never be reached, but as a safeguard
+    st.error("Authentication required. Please refresh the page.")
+    st.stop()
 
 
 # -------------------------
@@ -538,7 +554,7 @@ with tab2:
 
 
 # ============================================
-# TAB 3: HEALTH JOURNAL
+# TAB 3: HEALTH JOURNAL (WITH FILE ATTACHMENTS)
 # ============================================
 with tab3:
     st.header("Health Journal")
@@ -558,19 +574,61 @@ with tab3:
             height=150,
             key="journal_tab_entry"
         )
+        
+        # File uploader for attachments (NEW)
+        uploaded_file = st.file_uploader(
+            "📎 Attach File (Optional)",
+            type=['pdf', 'png', 'jpg', 'jpeg', 'gif'],
+            key=f"journal_file_upload_{st.session_state.file_uploader_key}",
+            help="Attach lab reports, images, or other documents"
+        )
     
     with col2:
         journal_date_tab = st.date_input("Date", key="journal_tab_date")
         
         if st.button("Add Entry", type="primary", use_container_width=True, key="journal_tab_add"):
             if journal_title and journal_entry_tab:
-                st.session_state.journal_entries.append({
+                # Create entry data
+                entry_data = {
                     "title": journal_title,
                     "date": journal_date_tab.strftime("%Y-%m-%d"),
                     "entry": journal_entry_tab,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
+                }
+                
+                # Handle file attachment if present
+                if uploaded_file is not None:
+                    # Create user's attachment folder
+                    attachment_dir = f"journal_attachments/{username}"
+                    os.makedirs(attachment_dir, exist_ok=True)
+                    
+                    # Generate unique filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    file_extension = uploaded_file.name.split('.')[-1]
+                    safe_filename = f"{timestamp}_{uploaded_file.name}"
+                    file_path = os.path.join(attachment_dir, safe_filename)
+                    
+                    # Save file
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    
+                    # Add file info to entry
+                    entry_data["attachment"] = {
+                        "filename": uploaded_file.name,
+                        "filepath": file_path,
+                        "type": file_extension.lower()
+                    }
+                
+                st.session_state.journal_entries.append(entry_data)
                 save_user_data()  # Save to file
+                
+                # Clear file uploader by changing its key
+                st.session_state.file_uploader_key += 1
+                
+                # Clear text input fields
+                st.session_state.journal_tab_title = ""
+                st.session_state.journal_tab_entry = ""
+                
                 st.success("✅ Entry added!")
                 st.rerun()
             else:
@@ -582,15 +640,63 @@ with tab3:
         st.subheader("Journal Entries")
         
         for entry in reversed(st.session_state.journal_entries):
-            with st.expander(f"📅 {entry['date']} - {entry.get('title', 'Untitled')}"):
+            # Show attachment indicator in header if present
+            attachment_indicator = " 📎" if "attachment" in entry else ""
+            
+            with st.expander(f"📅 {entry['date']} - {entry.get('title', 'Untitled')}{attachment_indicator}"):
                 st.write(entry['entry'])
                 
+                # Display attachment if present
+                if "attachment" in entry:
+                    st.divider()
+                    attachment = entry["attachment"]
+                    file_type = attachment["type"]
+                    
+                    # Display based on file type
+                    if file_type in ['png', 'jpg', 'jpeg', 'gif']:
+                        # Show image
+                        st.image(attachment["filepath"], caption=attachment["filename"], use_container_width=True)
+                    elif file_type == 'pdf':
+                        # Show PDF info with download button
+                        st.info(f"📄 PDF: {attachment['filename']}")
+                        
+                        # Read and provide download button
+                        with open(attachment["filepath"], "rb") as f:
+                            st.download_button(
+                                label="📥 Download PDF",
+                                data=f,
+                                file_name=attachment["filename"],
+                                mime="application/pdf",
+                                key=f"download_{entry['timestamp']}"
+                            )
+                
+                # Delete button
                 if st.button("🗑️ Delete", key=f"delete_tab_journal_{entry['timestamp']}"):
+                    # Try to delete attachment file if exists
+                    file_deleted = True
+                    if "attachment" in entry and "filepath" in entry["attachment"]:
+                        filepath = os.path.normpath(entry["attachment"]["filepath"])
+                        
+                        if os.path.exists(filepath):
+                            try:
+                                os.remove(filepath)
+                            except Exception as e:
+                                file_deleted = False
+                                st.warning(f"⚠️ Could not delete file: {str(e)}")
+                    
+                    # Remove entry from list
                     for idx, e in enumerate(st.session_state.journal_entries):
                         if e['timestamp'] == entry['timestamp']:
                             st.session_state.journal_entries.pop(idx)
                             break
-                    save_user_data()  # Save to file
+                    
+                    save_user_data()
+                    
+                    if file_deleted:
+                        st.success("✅ Entry and attachment deleted!")
+                    else:
+                        st.info("✅ Entry deleted (attachment file could not be removed)")
+                    
                     st.rerun()
     else:
         st.info("No journal entries yet.")

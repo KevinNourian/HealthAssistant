@@ -1,5 +1,11 @@
 {
-  "reminders": [],
+  "reminders": [
+    {
+      "text": "Dr. Americus",
+      "date": "2026-01-25",
+      "id": 1
+    }
+  ],
   "journal_entries": [
     {
       "title": "Dr. Americus",

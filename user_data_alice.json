@@ -6,5 +6,17 @@
       "id": 0
     }
   ],
-  "journal_entries": []
+  "journal_entries": [
+    {
+      "title": "Dr. Jurate",
+      "date": "2026-01-24",
+      "entry": "Saw the doctor today. Everything well. ",
+      "timestamp": "2026-01-24 14:37:23",
+      "attachment": {
+        "filename": "Normal-Lipid-profile-test-report-format-example-sample-template-Drlogy-lab-report.pdf",
+        "filepath": "journal_attachments/alice\\20260124_143723_Normal-Lipid-profile-test-report-format-example-sample-template-Drlogy-lab-report.pdf",
+        "type": "pdf"
+      }
+    }
+  ]
 }

@@ -41,7 +41,7 @@ credentials = {
         'usernames': users
     },
     'cookie': {
-        'expiry_days': 30,
+        'expiry_days': 0,
         'key': 'health_assistant_app_key',
         'name': 'health_assistant_cookie'
     },
