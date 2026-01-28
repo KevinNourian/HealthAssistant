@@ -462,7 +462,7 @@ with st.sidebar:
 st.title("Health Assistant App")
 
 # Create tabs
-tab1, tab2, tab3 = st.tabs(["Ask Health Question", "Summarize PDF", "Health Journal"])
+tab1, tab2, tab3, tab4 = st.tabs(["Ask Health Question", "Summarize PDF", "Analyse PDF", "Health Journal"])
 
 # ============================================
 # TAB 1: ASK HEALTH QUESTION
@@ -554,9 +554,92 @@ with tab2:
 
 
 # ============================================
-# TAB 3: HEALTH JOURNAL (WITH FILE ATTACHMENTS)
+# TAB 3: ANALYSE PDF (BLOOD WORK/LAB RESULTS)
 # ============================================
 with tab3:
+    st.header("Analyse PDF")
+    st.markdown("Upload a PDF of your blood analysis or lab report for AI analysis.")
+    
+    # File uploader for lab report
+    uploaded_lab_pdf = st.file_uploader(
+        "Upload Lab Report PDF",
+        type=['pdf'],
+        key="lab_pdf_upload",
+        help="Upload your blood work, lab results, or medical test report"
+    )
+    
+    if uploaded_lab_pdf is not None:
+        # Show file info
+        st.success(f"✅ Uploaded: {uploaded_lab_pdf.name}")
+        
+        if st.button("🔬 Analyse Report", type="primary", key="analyse_lab_btn"):
+            with st.spinner("Analyzing your lab report..."):
+                try:
+                    # Extract text from PDF
+                    from pypdf import PdfReader
+                    from io import BytesIO
+                    
+                    # Read PDF
+                    pdf_file = BytesIO(uploaded_lab_pdf.read())
+                    pdf_reader = PdfReader(pdf_file)
+                    
+                    # Extract text from all pages
+                    pdf_text = ""
+                    for page in pdf_reader.pages:
+                        pdf_text += page.extract_text() + "\n"
+                    
+                    if not pdf_text.strip():
+                        st.error("Could not extract text from PDF. The file may be an image-based PDF.")
+                    else:
+                        # Create analysis prompt
+                        analysis_prompt = f"""You are a medical AI assistant analyzing lab results. 
+                        
+Please analyze the following lab report and provide:
+
+1. **Key Findings**: List the main test results with their values
+2. **Normal vs. Abnormal**: Identify which values are outside normal ranges
+3. **Health Implications**: Explain what the results might indicate
+4. **Recommendations**: Suggest next steps (e.g., follow-up tests, lifestyle changes, consult doctor)
+
+IMPORTANT: 
+- This is for informational purposes only
+- Always recommend consulting with a healthcare provider
+- Be clear about which values are concerning
+
+Lab Report Content:
+{pdf_text[:4000]}
+
+Analysis:"""
+                        
+                        # Get AI analysis
+                        analysis_response = llm.invoke(analysis_prompt)
+                        analysis = analysis_response.content
+                        
+                        # Display results
+                        st.subheader("🔬 Analysis Results:")
+                        
+                        # Use container with custom styling for better rendering
+                        with st.container():
+                            st.markdown(analysis)
+                        
+                        st.markdown("---")  # Divider
+                        
+                        # Medical disclaimer
+                        st.warning("""
+                        ⚠️ **MEDICAL DISCLAIMER**: This analysis is for informational purposes only and should NOT be considered medical advice. 
+                        Always consult with a qualified healthcare provider to interpret your lab results.
+                        """)
+                        
+                except Exception as e:
+                    st.error(f"Error analyzing PDF: {str(e)}")
+    else:
+        st.info("👆 Upload a PDF of your lab report to get started")
+
+
+# ============================================
+# TAB 4: HEALTH JOURNAL (WITH FILE ATTACHMENTS)
+# ============================================
+with tab4:
     st.header("Health Journal")
     
     col1, col2 = st.columns([3, 1])

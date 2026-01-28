@@ -9,42 +9,19 @@
       "text": "Python technical interview",
       "date": "2026-01-24",
       "id": 1
+    },
+    {
+      "text": "Dr. Jurate",
+      "date": "2026-01-28",
+      "id": 2
     }
   ],
   "journal_entries": [
     {
-      "title": "Dr. Domantaite",
-      "date": "2026-01-24",
-      "entry": "I saw Dr. Domantaite. Everything is fine. ",
-      "timestamp": "2026-01-24 10:04:38"
-    },
-    {
       "title": "Dr. Diamante",
-      "date": "2026-01-24",
-      "entry": "Got a new prescription. ",
-      "timestamp": "2026-01-24 14:28:31",
-      "attachment": {
-        "filename": "LIPID-PROFILE-test-report-format-example-sample-template-Drlogy-lab-report.pdf",
-        "filepath": "journal_attachments/kevin\\20260124_142831_LIPID-PROFILE-test-report-format-example-sample-template-Drlogy-lab-report.pdf",
-        "type": "pdf"
-      }
-    },
-    {
-      "title": "Dr. Diamante",
-      "date": "2026-01-24",
-      "entry": "Got a new refill.",
-      "timestamp": "2026-01-24 16:23:19",
-      "attachment": {
-        "filename": "Comprehensive-Lab-Report-Sample.pdf",
-        "filepath": "journal_attachments/kevin\\20260124_162319_Comprehensive-Lab-Report-Sample.pdf",
-        "type": "pdf"
-      }
-    },
-    {
-      "title": "Dr. Diamante",
-      "date": "2026-01-24",
-      "entry": "Got a new refill.",
-      "timestamp": "2026-01-24 16:23:32"
+      "date": "2026-01-28",
+      "entry": "how are you?",
+      "timestamp": "2026-01-28 10:17:44"
     }
   ]
 }
