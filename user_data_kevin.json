@@ -19,9 +19,14 @@
   "journal_entries": [
     {
       "title": "Dr. Diamante",
-      "date": "2026-01-28",
-      "entry": "how are you?",
-      "timestamp": "2026-01-28 10:17:44"
+      "date": "2026-01-29",
+      "entry": "How are you today? Yes",
+      "timestamp": "2026-01-29 11:25:41",
+      "attachment": {
+        "filename": "PL02.pdf",
+        "filepath": "journal_attachments/kevin\\20260129_112541_PL02.pdf",
+        "type": "pdf"
+      }
     }
   ]
 }

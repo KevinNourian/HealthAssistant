@@ -37,21 +37,10 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-    /* ═══════════════════════════════════════════════════════════════════════
-       MINIMALIST NORDIC THEME
-       - Pure whites & soft grays
-       - Coral accent (#FF6B6B)
-       - Maximum whitespace
-       - Clean typography (Inter)
-       - Subtle interactions
-    ═══════════════════════════════════════════════════════════════════════ */
-    
-    /* Import Inter font - clean, modern, highly readable */
+    /* Import Inter font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
-    /* ─────────────────────────────────────────────────────────────────────
-       CSS Variables for easy theming
-    ───────────────────────────────────────────────────────────────────── */
+    /* CSS Variables */
     :root {
         --white: #FFFFFF;
         --off-white: #FAFAFA;
@@ -61,141 +50,72 @@ st.markdown("""
         --text-gray: #6B7280;
         --text-dark: #1F2937;
         --text-black: #111827;
-        --accent: #FF6B6B;
-        --accent-hover: #FF5252;
-        --accent-light: #FFF0F0;
         --success: #10B981;
         --success-light: #D1FAE5;
         --warning: #F59E0B;
         --warning-light: #FEF3C7;
         --error: #EF4444;
         --error-light: #FEE2E2;
-        --info: #6B7280;
         --info-light: #F3F4F6;
-        --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.04);
-        --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
-        --radius-sm: 6px;
+        --accent-blue: #3B82F6;
+        --accent-blue-light: #DBEAFE;
         --radius-md: 8px;
         --radius-lg: 12px;
-        --transition: all 0.2s ease;
     }
     
-    /* ─────────────────────────────────────────────────────────────────────
-       Global Styles
-    ───────────────────────────────────────────────────────────────────── */
-    /* Apply font to main content areas only */
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
-    .stApp p, .stApp div, .stApp label, 
-    .stApp input, .stApp textarea,
-    .stApp a, .stApp li, .stApp td, .stApp th,
-    .stMarkdown, .stText {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    }
-    
+    /* Main app background */
     .stApp {
         background-color: var(--off-white);
     }
     
-    /* ─────────────────────────────────────────────────────────────────────
-       Typography
-    ───────────────────────────────────────────────────────────────────── */
+    /* Typography */
+    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+    
     h1 {
         font-size: 2rem !important;
         font-weight: 600 !important;
         color: var(--text-black) !important;
-        letter-spacing: -0.5px !important;
-        margin-bottom: 0.25rem !important;
     }
     
-    h2 {
-        font-size: 1.25rem !important;
-        font-weight: 600 !important;
-        color: var(--text-dark) !important;
-        letter-spacing: -0.3px !important;
-        margin-top: 0 !important;
-    }
-    
-    h3 {
-        font-size: 1rem !important;
+    h2, h3 {
         font-weight: 600 !important;
         color: var(--text-dark) !important;
     }
     
-    .stMarkdown p, .stMarkdown div, .stMarkdown label {
-        color: var(--text-dark) !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Sidebar - Clean white with subtle border
-    ───────────────────────────────────────────────────────────────────── */
+    /* Sidebar */
     [data-testid="stSidebar"] {
         background-color: var(--white) !important;
         border-right: 1px solid var(--border-gray) !important;
     }
     
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding: 1rem 0.5rem !important;
-    }
-    
-    [data-testid="stSidebar"] h1, 
-    [data-testid="stSidebar"] h2, 
-    [data-testid="stSidebar"] h3 {
-        color: var(--text-dark) !important;
-    }
-    
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] .stMarkdown {
-        color: var(--text-gray) !important;
-        font-size: 0.875rem !important;
-    }
-    
-    /* Sidebar buttons - pure white to match Browse Files */
-    [data-testid="stSidebar"] .stButton > button {
+    /* ALL BUTTONS - Uniform white styling */
+    .stButton > button,
+    .stFormSubmitButton > button,
+    .stDownloadButton > button {
         background-color: var(--white) !important;
         color: var(--text-dark) !important;
         border: 1px solid var(--border-gray) !important;
         border-radius: var(--radius-md) !important;
+        padding: 0.5rem 1rem !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
         font-weight: 500 !important;
         font-size: 0.875rem !important;
-        padding: 0.5rem 1rem !important;
-        transition: var(--transition) !important;
     }
     
-    [data-testid="stSidebar"] .stButton > button:hover {
-        background-color: var(--light-gray) !important;
-        border-color: var(--medium-gray) !important;
-        transform: translateY(-1px) !important;
-    }
-    
-    /* Delete reminder button - pure white with bigger X */
-    [data-testid="stSidebar"] .stButton > button[kind="secondary"],
-    [data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {
-        background-color: var(--white) !important;
-        color: var(--text-dark) !important;
-        border: 1px solid var(--border-gray) !important;
-        font-size: 1.25rem !important;
-        font-weight: 600 !important;
-        padding: 0.25rem 0.625rem !important;
-        min-width: 32px !important;
-        min-height: 32px !important;
-        line-height: 1 !important;
-    }
-    
-    [data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover,
-    [data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover {
+    .stButton > button:hover,
+    .stFormSubmitButton > button:hover,
+    .stDownloadButton > button:hover {
         background-color: var(--light-gray) !important;
         border-color: var(--medium-gray) !important;
     }
     
-    /* ─────────────────────────────────────────────────────────────────────
-       Tabs - Minimal underline style
-    ───────────────────────────────────────────────────────────────────── */
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 0 !important;
         background-color: transparent !important;
         border-bottom: 1px solid var(--border-gray) !important;
-        padding: 0 !important;
     }
     
     .stTabs [data-baseweb="tab"] {
@@ -206,284 +126,108 @@ st.markdown("""
         background: transparent !important;
         border: none !important;
         border-bottom: 2px solid transparent !important;
-        border-radius: 0 !important;
         color: var(--text-gray) !important;
-        transition: var(--transition) !important;
-        white-space: nowrap !important;
     }
     
     .stTabs [data-baseweb="tab"]:hover {
         color: var(--text-dark) !important;
-        background: transparent !important;
     }
     
     .stTabs [aria-selected="true"] {
         color: var(--text-dark) !important;
         border-bottom: 2px solid var(--text-dark) !important;
-        background: transparent !important;
     }
     
-    .stTabs [data-baseweb="tab-panel"] {
-        padding-top: 2rem !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Buttons - Pure white to match Browse Files button
-       Use specific selectors to avoid affecting sidebar collapse button
-    ───────────────────────────────────────────────────────────────────── */
-    .stButton > button,
-    [data-testid="stFormSubmitButton"] > button {
-        background-color: var(--white) !important;
-        color: var(--text-dark) !important;
-        border: 1px solid var(--border-gray) !important;
-        border-radius: var(--radius-md) !important;
-        padding: 0.625rem 1.5rem !important;
-        font-weight: 500 !important;
-        font-size: 0.875rem !important;
-        transition: var(--transition) !important;
-        box-shadow: none !important;
-    }
-    
-    .stButton > button:hover,
-    [data-testid="stFormSubmitButton"] > button:hover {
-        background-color: var(--light-gray) !important;
-        border-color: var(--medium-gray) !important;
-        transform: translateY(-1px) !important;
-        box-shadow: var(--shadow-subtle) !important;
-    }
-    
-    .stButton > button:active,
-    [data-testid="stFormSubmitButton"] > button:active {
-        transform: translateY(0) !important;
-    }
-    
-    /* Secondary/outline buttons */
-    .stButton > button[kind="secondary"] {
-        background-color: var(--white) !important;
-        color: var(--text-dark) !important;
-        border: 1px solid var(--border-gray) !important;
-    }
-    
-    .stButton > button[kind="secondary"]:hover {
-        background-color: var(--light-gray) !important;
-        border-color: var(--medium-gray) !important;
-        box-shadow: none !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Form Inputs - Clean, minimal borders
-    ───────────────────────────────────────────────────────────────────── */
+    /* Form Inputs */
     .stTextInput input,
     .stTextArea textarea,
     .stDateInput input {
         background-color: var(--white) !important;
         border: 1px solid var(--border-gray) !important;
         border-radius: var(--radius-md) !important;
-        padding: 0.625rem 0.875rem !important;
         font-size: 0.875rem !important;
-        color: var(--text-dark) !important;
-        transition: var(--transition) !important;
-    }
-    
-    /* Selectbox - ensure selected value is visible */
-    .stSelectbox [data-baseweb="select"] {
-        background-color: var(--white) !important;
-        border: 1px solid var(--border-gray) !important;
-        border-radius: var(--radius-md) !important;
-    }
-    
-    .stSelectbox [data-baseweb="select"] > div {
-        background-color: var(--white) !important;
-        color: var(--text-dark) !important;
-    }
-    
-    /* Selectbox value text */
-    .stSelectbox [data-baseweb="select"] [data-testid="stMarkdownContainer"],
-    .stSelectbox [data-baseweb="select"] span {
         color: var(--text-dark) !important;
     }
     
     .stTextInput input:focus,
     .stTextArea textarea:focus,
-    .stSelectbox [data-baseweb="select"]:focus-within,
     .stDateInput input:focus {
         border-color: var(--medium-gray) !important;
         box-shadow: 0 0 0 3px var(--light-gray) !important;
-        outline: none !important;
     }
     
-    .stTextInput input::placeholder,
-    .stTextArea textarea::placeholder {
-        color: var(--medium-gray) !important;
+    /* Selectbox */
+    .stSelectbox [data-baseweb="select"] {
+        background-color: var(--white) !important;
     }
     
-    /* Labels */
-    .stTextInput label,
-    .stTextArea label,
-    .stSelectbox label,
-    .stDateInput label {
-        font-size: 0.8125rem !important;
-        font-weight: 500 !important;
-        color: var(--text-gray) !important;
-        margin-bottom: 0.375rem !important;
+    .stSelectbox [data-baseweb="select"] > div {
+        background-color: var(--white) !important;
+        border: 1px solid var(--border-gray) !important;
+        border-radius: var(--radius-md) !important;
     }
     
-    /* ─────────────────────────────────────────────────────────────────────
-       File Uploader - Minimal dashed border
-    ───────────────────────────────────────────────────────────────────── */
+    /* File Uploader */
     [data-testid="stFileUploader"] {
         background: var(--white) !important;
         border: 1px dashed var(--border-gray) !important;
         border-radius: var(--radius-md) !important;
         padding: 1.5rem !important;
-        transition: var(--transition) !important;
     }
     
-    [data-testid="stFileUploader"]:hover {
-        border-color: var(--medium-gray) !important;
-        background: var(--off-white) !important;
-    }
-    
-    [data-testid="stFileUploader"] section {
-        padding: 0 !important;
-    }
-    
-    [data-testid="stFileUploader"] section > div {
-        padding: 0 !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Alert Messages - Subtle left border style
-    ───────────────────────────────────────────────────────────────────── */
+    /* Alerts */
     .stSuccess {
         background-color: var(--success-light) !important;
-        border: none !important;
         border-left: 3px solid var(--success) !important;
-        border-radius: var(--radius-sm) !important;
-        padding: 0.875rem 1rem !important;
-    }
-    
-    .stSuccess p {
-        color: #065F46 !important;
-        font-size: 0.875rem !important;
     }
     
     .stInfo {
         background-color: var(--info-light) !important;
-        border: none !important;
-        border-left: 3px solid var(--info) !important;
-        border-radius: var(--radius-sm) !important;
-        padding: 0.875rem 1rem !important;
-    }
-    
-    .stInfo p {
-        color: var(--text-dark) !important;
-        font-size: 0.875rem !important;
+        border-left: 3px solid var(--text-gray) !important;
     }
     
     .stWarning {
         background-color: var(--warning-light) !important;
-        border: none !important;
         border-left: 3px solid var(--warning) !important;
-        border-radius: var(--radius-sm) !important;
-        padding: 0.875rem 1rem !important;
-    }
-    
-    .stWarning p {
-        color: #92400E !important;
-        font-size: 0.875rem !important;
     }
     
     .stError {
         background-color: var(--error-light) !important;
-        border: none !important;
         border-left: 3px solid var(--error) !important;
-        border-radius: var(--radius-sm) !important;
-        padding: 0.875rem 1rem !important;
     }
     
-    .stError p {
-        color: #991B1B !important;
-        font-size: 0.875rem !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Expanders - Clean minimal style (if used elsewhere)
-    ───────────────────────────────────────────────────────────────────── */
-    [data-testid="stExpander"] {
-        border: 1px solid var(--border-gray) !important;
-        border-radius: var(--radius-md) !important;
-        background: var(--white) !important;
-    }
-    
-    [data-testid="stExpander"] summary {
-        background: var(--white) !important;
-        padding: 0.75rem 1rem !important;
-        font-weight: 500 !important;
-        color: var(--text-dark) !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Sidebar collapse button - let Streamlit handle this natively
-    ───────────────────────────────────────────────────────────────────── */
-    /* No custom styles - preserve default Streamlit behavior */
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Dividers - Subtle and light
-    ───────────────────────────────────────────────────────────────────── */
-    hr {
-        border: none !important;
-        height: 1px !important;
-        background-color: var(--border-gray) !important;
-        margin: 1.5rem 0 !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Cards - Answer/Summary display boxes (full width)
-    ───────────────────────────────────────────────────────────────────── */
-    .answer-card {
-        background: var(--white);
-        border: 1px solid var(--border-gray);
-        border-radius: var(--radius-lg);
-        padding: 1.5rem;
-        margin-top: 1rem;
-        box-shadow: var(--shadow-subtle);
-        width: 100%;
-        max-width: 100%;
-    }
-    
-    .answer-card p {
-        color: var(--text-dark);
-        font-size: 0.9375rem;
-        line-height: 1.7;
-        margin: 0;
-    }
-    
-    /* st.container with border styling */
-    [data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {
+    /* Containers with border */
+    [data-testid="stVerticalBlockBorderWrapper"] {
         background: var(--white) !important;
         border: 1px solid var(--border-gray) !important;
         border-radius: var(--radius-lg) !important;
-        padding: 0 !important;
     }
     
-    [data-testid="stVerticalBlockBorderWrapper"] > div {
-        padding: 1rem 1.25rem !important;
+    /* Chat message styling */
+    .chat-question {
+        background: var(--white) !important;
+        border: 1px solid var(--border-gray) !important;
+        padding: 1rem !important;
+        border-radius: var(--radius-md) !important;
+        margin-bottom: 0.5rem !important;
     }
     
-    /* ─────────────────────────────────────────────────────────────────────
-       Welcome header styling
-    ───────────────────────────────────────────────────────────────────── */
-    .welcome-header {
-        font-size: 0.9375rem;
-        font-weight: 500;
-        color: var(--text-dark);
-        margin-bottom: 0.5rem;
+    .chat-answer {
+        background: var(--white) !important;
+        border: 1px solid var(--border-gray) !important;
+        padding: 1rem !important;
+        border-radius: var(--radius-md) !important;
+        margin-bottom: 1.5rem !important;
     }
     
-    /* ─────────────────────────────────────────────────────────────────────
-       Config metrics - sidebar display
-    ───────────────────────────────────────────────────────────────────── */
+    /* Hide form hints */
+    .stForm small,
+    [data-testid="stForm"] small,
+    [data-testid="InputInstructions"] {
+        display: none !important;
+    }
+    
+    /* Config display */
     .config-item {
         margin-bottom: 0.75rem;
     }
@@ -492,133 +236,15 @@ st.markdown("""
         font-size: 0.6875rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: var(--text-gray);
+        color: #6B7280;
         margin-bottom: 0.125rem;
     }
     
     .config-value {
         font-size: 0.75rem;
         font-weight: 600;
-        color: var(--text-dark);
+        color: #1F2937;
         word-break: break-word;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Reminder items
-    ───────────────────────────────────────────────────────────────────── */
-    .reminder-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.625rem 0;
-        border-bottom: 1px solid var(--light-gray);
-    }
-    
-    .reminder-item:last-child {
-        border-bottom: none;
-    }
-    
-    .reminder-date {
-        font-size: 0.75rem;
-        color: var(--text-gray);
-        font-weight: 500;
-    }
-    
-    .reminder-text {
-        font-size: 0.8125rem;
-        color: var(--text-dark);
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Medical disclaimer box
-    ───────────────────────────────────────────────────────────────────── */
-    .disclaimer-box {
-        background: var(--warning-light);
-        border-left: 3px solid var(--warning);
-        border-radius: var(--radius-sm);
-        padding: 1rem;
-        margin-top: 1.5rem;
-    }
-    
-    .disclaimer-box p {
-        color: #92400E;
-        font-size: 0.8125rem;
-        margin: 0;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Hide Streamlit branding & form hints
-    ───────────────────────────────────────────────────────────────────── */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    /* Hide "Press Enter to submit form" and ALL form hints comprehensively */
-    .stForm [data-testid="stFormSubmitContent"],
-    [data-testid="stFormSubmitButton"] ~ div,
-    .stFormSubmitContent,
-    [data-testid="stForm"] small,
-    .stTextArea [data-testid="stMarkdownContainer"] small,
-    .stTextArea small,
-    [data-testid="stForm"] [data-testid="InputInstructions"],
-    [data-testid="InputInstructions"],
-    .stForm div[data-testid="InputInstructions"],
-    div[data-baseweb="form-control-counter"],
-    .stTextInput + div small,
-    .stForm .stTextInput + div,
-    [data-testid="stForm"] > div > div > div > small,
-    [data-testid="stForm"] span:has(+ button) small,
-    /* Target all small/caption text in forms */
-    [data-testid="stForm"] .stCaption,
-    [data-testid="stForm"] [data-testid="stCaptionContainer"],
-    form small,
-    form .stCaption,
-    /* Streamlit form instructions wrapper */
-    [data-testid="stForm"] > div:last-child > div:last-child > small,
-    [data-testid="stForm"] > div > div:has(button) + div,
-    /* Hide any remaining instruction text */
-    .stForm > div > div > div:has(small):not(:has(input)):not(:has(button)) {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        overflow: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Download button styling - pure white
-    ───────────────────────────────────────────────────────────────────── */
-    .stDownloadButton button {
-        background-color: var(--white) !important;
-        color: var(--text-dark) !important;
-        border: 1px solid var(--border-gray) !important;
-        font-size: 0.8125rem !important;
-    }
-    
-    .stDownloadButton button:hover {
-        background-color: var(--light-gray) !important;
-        border-color: var(--medium-gray) !important;
-    }
-    
-    /* ─────────────────────────────────────────────────────────────────────
-       Scrollbar styling
-    ───────────────────────────────────────────────────────────────────── */
-    ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: var(--light-gray);
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: var(--medium-gray);
-        border-radius: 3px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: var(--text-gray);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -655,6 +281,7 @@ if "authentication_status" not in st.session_state or st.session_state["authenti
         st.markdown("---")
         st.markdown("##### Sign In")
         
+        # Use authenticator's built-in login
         authenticator.login(location='sidebar')
         
         if st.session_state.get("authentication_status") == False:
@@ -717,17 +344,14 @@ if "current_user" not in st.session_state or st.session_state.current_user != us
     st.session_state.reminders = user_data.get("reminders", [])
     st.session_state.journal_entries = user_data.get("journal_entries", [])
     st.session_state.current_user = username
-    st.session_state.answer = ""
-    st.session_state.sources = []
     st.session_state.file_uploader_key = 0
     st.session_state.pdf_summary = ""
     st.session_state.lab_analysis = ""
     st.session_state.lab_error = None
+    st.session_state.editing_entry = None
+    st.session_state.conversation_history = []
+    st.session_state.question_counter = 0
 
-if "answer" not in st.session_state:
-    st.session_state.answer = ""
-if "sources" not in st.session_state:
-    st.session_state.sources = []
 if "file_uploader_key" not in st.session_state:
     st.session_state.file_uploader_key = 0
 if "pdf_summary" not in st.session_state:
@@ -736,6 +360,12 @@ if "lab_analysis" not in st.session_state:
     st.session_state.lab_analysis = ""
 if "lab_error" not in st.session_state:
     st.session_state.lab_error = None
+if "editing_entry" not in st.session_state:
+    st.session_state.editing_entry = None
+if "conversation_history" not in st.session_state:
+    st.session_state.conversation_history = []
+if "question_counter" not in st.session_state:
+    st.session_state.question_counter = 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -878,7 +508,7 @@ if authentication_status is not True:
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     # User greeting
-    st.markdown(f"<p class='welcome-header'>Welcome, {name}</p>", unsafe_allow_html=True)
+    st.markdown(f"**Welcome, {name}!**")
     
     try:
         authenticator.logout(location='sidebar', button_name='Sign Out')
@@ -995,25 +625,67 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 1: ASK HEALTH QUESTION
+# TAB 1: ASK HEALTH QUESTION (CHAT STYLE)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
     st.markdown("### Ask a Health Question")
-    st.markdown("<p style='color: #6B7280; font-size: 14px; margin-bottom: 1.5rem;'>Get answers from your knowledge base or the web</p>", unsafe_allow_html=True)
+    st.caption("Get answers from your knowledge base or the web")
     
+    # Display conversation history
+    if st.session_state.conversation_history:
+        st.markdown("---")
+        for qa in st.session_state.conversation_history:
+            # Question
+            st.markdown(f"""
+            <div class="chat-question">
+                <strong style="color: #1F2937;">Q:</strong> {qa['question']}
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Answer
+            st.markdown(f"""
+            <div class="chat-answer">
+                <strong style="color: #1F2937;">A:</strong><br><br>
+                {qa['answer']}
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Sources if available
+            if qa.get('sources'):
+                for source_label, source_url in qa['sources']:
+                    if source_url != "Knowledge Base":
+                        st.caption(f"  {source_label}: {source_url}")
+                    else:
+                        st.caption(f"  {source_label}: {source_url}")
+        
+        st.markdown("---")
+    
+    # Input for new question (full width)
     question = st.text_input(
         "Question",
         placeholder="Type your health question here...",
-        key="health_question",
+        key=f"health_question_{st.session_state.question_counter}",
         label_visibility="collapsed"
     )
     
-    if st.button("Ask", type="primary", key="ask_btn"):
+    # Buttons side by side below input
+    col_ask, col_clear = st.columns(2)
+    
+    with col_ask:
+        ask_button = st.button("Ask", key="ask_btn", use_container_width=True)
+    
+    with col_clear:
+        if st.button("Clear Chat", key="clear_btn", use_container_width=True):
+            st.session_state.conversation_history = []
+            st.rerun()
+    
+    if ask_button:
         if question:
             with st.spinner("Searching..."):
                 try:
                     response = chain.invoke(question)
                     answer_text = response.content.strip()
+                    sources = []
                     
                     if answer_text.lower() in ["i don't know.", "i don't know", "unknown"]:
                         web_results = serpapi_search(question)
@@ -1023,37 +695,33 @@ with tab1:
                             for result in web_results:
                                 combined_answer += f"**{result['title']}**\n{result['snippet']}\n\n"
                             
-                            st.session_state.answer = combined_answer
-                            st.session_state.sources = [
+                            answer_text = combined_answer
+                            sources = [
                                 (f"Source {i}", result['url']) 
                                 for i, result in enumerate(web_results, 1)
                             ]
                         else:
-                            st.session_state.answer = "I couldn't find enough information to answer this question."
-                            st.session_state.sources = []
+                            answer_text = "I couldn't find enough information to answer this question."
+                            sources = []
                     else:
-                        st.session_state.answer = answer_text
-                        st.session_state.sources = [("Source", "Knowledge Base")]
+                        sources = [("Source", "Knowledge Base")]
+                    
+                    # Add to conversation history
+                    st.session_state.conversation_history.append({
+                        'question': question,
+                        'answer': answer_text,
+                        'sources': sources
+                    })
+                    
+                    # Increment counter to clear input box
+                    st.session_state.question_counter += 1
+                    
+                    st.rerun()
                     
                 except Exception as e:
-                    st.session_state.answer = f"Error: {str(e)}"
-                    st.session_state.sources = []
+                    st.error(f"Error: {str(e)}")
         else:
             st.warning("Please enter a question")
-    
-    # Display answer (full width with proper markdown rendering)
-    if st.session_state.answer:
-        st.markdown("#### Answer")
-        with st.container(border=True):
-            st.markdown(st.session_state.answer)
-        
-        if st.session_state.sources:
-            st.markdown("")
-            for source_label, source_url in st.session_state.sources:
-                if source_url != "Knowledge Base":
-                    st.markdown(f"<p style='font-size: 13px; color: #6B7280;'>{source_label}: <a href='{source_url}' style='color: #1F2937;'>{source_url[:60]}...</a></p>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<p style='font-size: 13px; color: #6B7280;'>{source_label}: {source_url}</p>", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1061,24 +729,23 @@ with tab1:
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
     st.markdown("### Summarize Document")
-    st.markdown("<p style='color: #6B7280; font-size: 14px; margin-bottom: 1.5rem;'>Generate AI summaries of your health documents</p>", unsafe_allow_html=True)
+    st.caption("Generate AI summaries of your health documents")
     
     if config["pdf_files"]:
         selected_pdf = st.selectbox(
             "Select document",
             options=config["pdf_files"],
             format_func=lambda x: os.path.basename(x),
-            key="pdf_select",
-            label_visibility="collapsed"
+            key="pdf_select"
         )
         
-        if st.button("Summarize", type="primary", key="summarize_btn"):
+        if st.button("Summarize", key="summarize_btn"):
             with st.spinner("Generating summary..."):
                 summary = summarize_pdf(selected_pdf)
                 st.session_state.pdf_summary = summary
         
-        # Display summary if exists (full width with proper markdown rendering)
-        if "pdf_summary" in st.session_state and st.session_state.pdf_summary:
+        # Display summary
+        if st.session_state.pdf_summary:
             st.markdown("#### Summary")
             with st.container(border=True):
                 st.markdown(st.session_state.pdf_summary)
@@ -1091,20 +758,19 @@ with tab2:
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
     st.markdown("### Analyse Lab Report")
-    st.markdown("<p style='color: #6B7280; font-size: 14px; margin-bottom: 1.5rem;'>Upload your blood work or lab results for AI analysis</p>", unsafe_allow_html=True)
+    st.caption("Upload your blood work or lab results for AI analysis")
     
     uploaded_lab_pdf = st.file_uploader(
         "Upload Lab Report",
         type=['pdf'],
         key="lab_pdf_upload",
-        help="Upload your blood work, lab results, or medical test report",
-        label_visibility="collapsed"
+        help="Upload your blood work, lab results, or medical test report"
     )
     
     if uploaded_lab_pdf is not None:
         st.success(f"Uploaded: {uploaded_lab_pdf.name}")
         
-        if st.button("Analyse", type="primary", key="analyse_btn"):
+        if st.button("Analyse", key="analyse_btn"):
             with st.spinner("Analyzing report..."):
                 try:
                     from pypdf import PdfReader
@@ -1145,13 +811,12 @@ Analysis:"""
                     st.session_state.lab_analysis = None
                     st.session_state.lab_error = f"Error analyzing PDF: {str(e)}"
         
-        # Display analysis results (full width)
-        if "lab_error" in st.session_state and st.session_state.lab_error:
+        # Display results
+        if st.session_state.lab_error:
             st.error(st.session_state.lab_error)
         
-        if "lab_analysis" in st.session_state and st.session_state.lab_analysis:
+        if st.session_state.lab_analysis:
             st.markdown("#### Analysis Results")
-            # Use st.container with st.markdown for proper markdown rendering
             with st.container(border=True):
                 st.markdown(st.session_state.lab_analysis)
             
@@ -1166,7 +831,7 @@ This analysis is for informational purposes only and should NOT be considered me
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
     st.markdown("### Health Journal")
-    st.markdown("<p style='color: #6B7280; font-size: 14px; margin-bottom: 1.5rem;'>Track your health journey with notes and attachments</p>", unsafe_allow_html=True)
+    st.caption("Track your health journey with notes and attachments")
     
     col1, col2 = st.columns([3, 1])
     
@@ -1187,16 +852,15 @@ with tab4:
         uploaded_file = st.file_uploader(
             "Attachment (optional)",
             type=['pdf', 'png', 'jpg', 'jpeg', 'gif'],
-            key=f"journal_file_{st.session_state.file_uploader_key}",
-            label_visibility="collapsed"
+            key=f"journal_file_{st.session_state.file_uploader_key}"
         )
     
     with col2:
         journal_date = st.date_input("Date", key="journal_date")
         
-        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+        st.markdown("")
         
-        if st.button("Save Entry", type="primary", use_container_width=True):
+        if st.button("Save Entry", use_container_width=True):
             if journal_title and journal_entry:
                 entry_data = {
                     "title": journal_title,
@@ -1226,6 +890,8 @@ with tab4:
                 st.session_state.journal_entries.append(entry_data)
                 save_user_data()
                 st.session_state.file_uploader_key += 1
+                st.session_state.journal_title = ""
+                st.session_state.journal_entry = ""
                 st.success("Entry saved!")
                 st.rerun()
             else:
@@ -1233,50 +899,95 @@ with tab4:
     
     st.markdown("---")
     
+    # Past Entries
     if st.session_state.journal_entries:
         st.markdown("#### Past Entries")
         
         for entry in reversed(st.session_state.journal_entries):
             attachment_icon = " 📎" if "attachment" in entry else ""
+            is_editing = (st.session_state.editing_entry == entry['timestamp'])
             
-            # Use container with border instead of expander for better rendering
             with st.container(border=True):
-                st.markdown(f"**{entry['date']} — {entry.get('title', 'Untitled')}{attachment_icon}**")
-                st.markdown(entry['entry'])
-                
-                if "attachment" in entry:
-                    st.markdown("---")
-                    attachment = entry["attachment"]
-                    file_type = attachment["type"]
+                if is_editing:
+                    # Edit mode
+                    st.markdown("**✏️ Editing Entry**")
                     
-                    if file_type in ['png', 'jpg', 'jpeg', 'gif']:
-                        st.image(attachment["filepath"], caption=attachment["filename"], use_container_width=True)
-                    elif file_type == 'pdf':
-                        st.caption(f"📄 {attachment['filename']}")
-                        with open(attachment["filepath"], "rb") as f:
-                            st.download_button(
-                                label="Download PDF",
-                                data=f,
-                                file_name=attachment["filename"],
-                                mime="application/pdf",
-                                key=f"dl_{entry['timestamp']}"
-                            )
-                
-                if st.button("Delete Entry", key=f"del_{entry['timestamp']}"):
-                    if "attachment" in entry and "filepath" in entry["attachment"]:
-                        filepath = os.path.normpath(entry["attachment"]["filepath"])
-                        if os.path.exists(filepath):
-                            try:
-                                os.remove(filepath)
-                            except Exception:
-                                pass
+                    edited_title = st.text_input(
+                        "Title",
+                        value=entry.get('title', ''),
+                        key=f"edit_title_{entry['timestamp']}"
+                    )
                     
-                    for idx, e in enumerate(st.session_state.journal_entries):
-                        if e['timestamp'] == entry['timestamp']:
-                            st.session_state.journal_entries.pop(idx)
-                            break
+                    edited_entry_text = st.text_area(
+                        "Entry",
+                        value=entry['entry'],
+                        height=120,
+                        key=f"edit_entry_{entry['timestamp']}"
+                    )
                     
-                    save_user_data()
-                    st.rerun()
+                    col_save, col_cancel = st.columns(2)
+                    with col_save:
+                        if st.button("Save Changes", key=f"save_{entry['timestamp']}", use_container_width=True):
+                            for idx, e in enumerate(st.session_state.journal_entries):
+                                if e['timestamp'] == entry['timestamp']:
+                                    st.session_state.journal_entries[idx]['title'] = edited_title
+                                    st.session_state.journal_entries[idx]['entry'] = edited_entry_text
+                                    break
+                            save_user_data()
+                            st.session_state.editing_entry = None
+                            st.success("Entry updated!")
+                            st.rerun()
+                    
+                    with col_cancel:
+                        if st.button("Cancel", key=f"cancel_{entry['timestamp']}", use_container_width=True):
+                            st.session_state.editing_entry = None
+                            st.rerun()
+                else:
+                    # Display mode
+                    st.markdown(f"**{entry['date']} — {entry.get('title', 'Untitled')}{attachment_icon}**")
+                    st.markdown(entry['entry'])
+                    
+                    if "attachment" in entry:
+                        st.markdown("---")
+                        attachment = entry["attachment"]
+                        file_type = attachment["type"]
+                        
+                        if file_type in ['png', 'jpg', 'jpeg', 'gif']:
+                            st.image(attachment["filepath"], caption=attachment["filename"], use_container_width=True)
+                        elif file_type == 'pdf':
+                            st.caption(f"📄 {attachment['filename']}")
+                            with open(attachment["filepath"], "rb") as f:
+                                st.download_button(
+                                    label="Download PDF",
+                                    data=f,
+                                    file_name=attachment["filename"],
+                                    mime="application/pdf",
+                                    key=f"dl_{entry['timestamp']}"
+                                )
+                    
+                    # Edit and Delete buttons
+                    col_edit, col_delete = st.columns(2)
+                    with col_edit:
+                        if st.button("Edit Entry", key=f"edit_{entry['timestamp']}", use_container_width=True):
+                            st.session_state.editing_entry = entry['timestamp']
+                            st.rerun()
+                    
+                    with col_delete:
+                        if st.button("Delete Entry", key=f"del_{entry['timestamp']}", use_container_width=True):
+                            if "attachment" in entry and "filepath" in entry["attachment"]:
+                                filepath = os.path.normpath(entry["attachment"]["filepath"])
+                                if os.path.exists(filepath):
+                                    try:
+                                        os.remove(filepath)
+                                    except Exception:
+                                        pass
+                            
+                            for idx, e in enumerate(st.session_state.journal_entries):
+                                if e['timestamp'] == entry['timestamp']:
+                                    st.session_state.journal_entries.pop(idx)
+                                    break
+                            
+                            save_user_data()
+                            st.rerun()
     else:
         st.info("No journal entries yet. Start tracking your health journey!")
