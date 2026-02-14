@@ -378,6 +378,12 @@ def load_config(config_path: str = "config.json") -> dict:
         return json.load(f)
 
 
+def save_config(config_data: dict, config_path: str = "config.json") -> None:
+    """Save configuration to JSON file."""
+    with open(config_path, 'w') as f:
+        json.dump(config_data, f, indent=2)
+
+
 config = load_config()
 
 
@@ -616,10 +622,11 @@ with st.sidebar:
 st.title("Health Assistant")
 
 # Create tabs
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Ask Question",
     "Summarize",
     "Analyse Lab Report",
+    "Manage Documents",
     "Journal"
 ])
 
@@ -827,9 +834,111 @@ This analysis is for informational purposes only and should NOT be considered me
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 4: HEALTH JOURNAL
+# TAB 4: MANAGE DOCUMENTS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
+    st.markdown("### Manage Knowledge Base")
+    st.caption("Upload PDFs to expand your health knowledge base")
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # Current Documents Section
+    # ─────────────────────────────────────────────────────────────────────
+    st.markdown("#### Current Documents")
+    
+    if config["pdf_files"]:
+        for idx, pdf_path in enumerate(config["pdf_files"]):
+            col1, col2 = st.columns([5, 1])
+            
+            with col1:
+                filename = os.path.basename(pdf_path)
+                file_size = "Unknown size"
+                if os.path.exists(pdf_path):
+                    size_bytes = os.path.getsize(pdf_path)
+                    size_kb = size_bytes / 1024
+                    if size_kb < 1024:
+                        file_size = f"{size_kb:.1f} KB"
+                    else:
+                        file_size = f"{size_kb/1024:.1f} MB"
+                
+                st.markdown(f"📄 **{filename}** · {file_size}")
+            
+            with col2:
+                if st.button("Delete", key=f"del_pdf_{idx}", use_container_width=True):
+                    try:
+                        # Remove from config
+                        config["pdf_files"].remove(pdf_path)
+                        save_config(config)
+                        
+                        # Delete physical file
+                        if os.path.exists(pdf_path):
+                            os.remove(pdf_path)
+                        
+                        # Clear cache to force rebuild
+                        st.cache_resource.clear()
+                        
+                        st.success(f"✅ Deleted {filename}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error deleting file: {str(e)}")
+    else:
+        st.info("No documents in knowledge base yet")
+    
+    st.markdown("---")
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # Upload New Document Section
+    # ─────────────────────────────────────────────────────────────────────
+    st.markdown("#### Add New Document")
+    
+    uploaded_pdf = st.file_uploader(
+        "Upload PDF",
+        type=['pdf'],
+        key="kb_pdf_upload",
+        help="Upload health-related PDF documents to add to your knowledge base"
+    )
+    
+    if uploaded_pdf:
+        st.success(f"✓ Selected: **{uploaded_pdf.name}**")
+        
+        if st.button("Add to Knowledge Base", type="primary", use_container_width=True):
+            with st.spinner("Adding document to knowledge base..."):
+                try:
+                    # 1. Create pdfs directory if it doesn't exist
+                    pdf_dir = "pdfs"
+                    os.makedirs(pdf_dir, exist_ok=True)
+                    
+                    # 2. Save PDF file to disk
+                    pdf_path = os.path.join(pdf_dir, uploaded_pdf.name)
+                    
+                    with open(pdf_path, "wb") as f:
+                        f.write(uploaded_pdf.getbuffer())
+                    
+                    # 3. Update config (avoid duplicates)
+                    if pdf_path not in config["pdf_files"]:
+                        config["pdf_files"].append(pdf_path)
+                        save_config(config)
+                    
+                    # 4. Clear cache (lazy loading - rebuild on next question)
+                    st.cache_resource.clear()
+                    
+                    st.success(f"✅ Successfully added **{uploaded_pdf.name}**!")
+                    st.info("🔄 Knowledge base will update when you ask your next question.")
+                    
+                    # Small delay for user to see success message
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error adding document: {str(e)}")
+    else:
+        st.info("👆 Choose a PDF file to add to your knowledge base")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5: HEALTH JOURNAL
+# ─────────────────────────────────────────────────────────────────────────────
+with tab5:
     st.markdown("### Health Journal")
     st.caption("Track your health journey with notes and attachments")
     
