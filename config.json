@@ -3,10 +3,9 @@
     "data/COVID-19.pdf",
     "data/Diabetes.pdf",
     "data/Hypertension.pdf",
-    "data/Asthma.pdf",
     "data/Heart_Disease.pdf",
     "data/Physical_wellness.pdf",
-    "data/Obesity.pdf"
+    "pdfs\\Cancer.pdf"
   ],
   "chroma_directory": "data/chroma_db",
   "chunking": {

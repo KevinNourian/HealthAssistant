@@ -1,0 +1,209 @@
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* CSS Variables */
+:root {
+    --white: #FFFFFF;
+    --off-white: #FAFAFA;
+    --light-gray: #F5F5F5;
+    --border-gray: #E8E8E8;
+    --medium-gray: #D0D0D0;
+    --text-gray: #6B7280;
+    --text-dark: #1F2937;
+    --text-black: #111827;
+    --success: #10B981;
+    --success-light: #D1FAE5;
+    --warning: #F59E0B;
+    --warning-light: #FEF3C7;
+    --error: #EF4444;
+    --error-light: #FEE2E2;
+    --info-light: #F3F4F6;
+    --accent-blue: #3B82F6;
+    --accent-blue-light: #DBEAFE;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+}
+
+/* Main app background */
+.stApp {
+    background-color: var(--off-white);
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+h1 {
+    font-size: 2rem !important;
+    font-weight: 600 !important;
+    color: var(--text-black) !important;
+}
+
+h2, h3 {
+    font-weight: 600 !important;
+    color: var(--text-dark) !important;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: var(--white) !important;
+    border-right: 1px solid var(--border-gray) !important;
+}
+
+/* ALL BUTTONS - Uniform white styling */
+.stButton > button,
+.stFormSubmitButton > button,
+.stDownloadButton > button {
+    background-color: var(--white) !important;
+    color: var(--text-dark) !important;
+    border: 1px solid var(--border-gray) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 0.5rem 1rem !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+}
+
+.stButton > button:hover,
+.stFormSubmitButton > button:hover,
+.stDownloadButton > button:hover {
+    background-color: var(--light-gray) !important;
+    border-color: var(--medium-gray) !important;
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0 !important;
+    background-color: transparent !important;
+    border-bottom: 1px solid var(--border-gray) !important;
+}
+
+.stTabs [data-baseweb="tab"] {
+    height: 48px !important;
+    padding: 0 24px !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    color: var(--text-gray) !important;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    color: var(--text-dark) !important;
+}
+
+.stTabs [aria-selected="true"] {
+    color: var(--text-dark) !important;
+    border-bottom: 2px solid var(--text-dark) !important;
+}
+
+/* Form Inputs */
+.stTextInput input,
+.stTextArea textarea,
+.stDateInput input {
+    background-color: var(--white) !important;
+    border: 1px solid var(--border-gray) !important;
+    border-radius: var(--radius-md) !important;
+    font-size: 0.875rem !important;
+    color: var(--text-dark) !important;
+}
+
+.stTextInput input:focus,
+.stTextArea textarea:focus,
+.stDateInput input:focus {
+    border-color: var(--medium-gray) !important;
+    box-shadow: 0 0 0 3px var(--light-gray) !important;
+}
+
+/* Selectbox */
+.stSelectbox [data-baseweb="select"] {
+    background-color: var(--white) !important;
+}
+
+.stSelectbox [data-baseweb="select"] > div {
+    background-color: var(--white) !important;
+    border: 1px solid var(--border-gray) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+/* File Uploader */
+[data-testid="stFileUploader"] {
+    background: var(--white) !important;
+    border: 1px dashed var(--border-gray) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 1.5rem !important;
+}
+
+/* Alerts */
+.stSuccess {
+    background-color: var(--success-light) !important;
+    border-left: 3px solid var(--success) !important;
+}
+
+.stInfo {
+    background-color: var(--info-light) !important;
+    border-left: 3px solid var(--text-gray) !important;
+}
+
+.stWarning {
+    background-color: var(--warning-light) !important;
+    border-left: 3px solid var(--warning) !important;
+}
+
+.stError {
+    background-color: var(--error-light) !important;
+    border-left: 3px solid var(--error) !important;
+}
+
+/* Containers with border */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: var(--white) !important;
+    border: 1px solid var(--border-gray) !important;
+    border-radius: var(--radius-lg) !important;
+}
+
+/* Chat message styling */
+.chat-question {
+    background: var(--white) !important;
+    border: 1px solid var(--border-gray) !important;
+    padding: 1rem !important;
+    border-radius: var(--radius-md) !important;
+    margin-bottom: 0.5rem !important;
+}
+
+.chat-answer {
+    background: var(--white) !important;
+    border: 1px solid var(--border-gray) !important;
+    padding: 1rem !important;
+    border-radius: var(--radius-md) !important;
+    margin-bottom: 1.5rem !important;
+}
+
+/* Hide form hints */
+.stForm small,
+[data-testid="stForm"] small,
+[data-testid="InputInstructions"] {
+    display: none !important;
+}
+
+/* Config display */
+.config-item {
+    margin-bottom: 0.75rem;
+}
+
+.config-label {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6B7280;
+    margin-bottom: 0.125rem;
+}
+
+.config-value {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1F2937;
+    word-break: break-word;
+}

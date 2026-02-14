@@ -6,7 +6,8 @@ Handles PDF loading, chunking, embedding, and persistence.
 """
 
 import os
-from typing import List
+import shutil
+from typing import Dict, List, Set
 from pathlib import Path
 
 from langchain_openai import OpenAIEmbeddings
@@ -14,6 +15,36 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Path Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def normalize_source_path(path: str) -> str:
+    """Normalize a file path for consistent source-metadata comparison.
+
+    Converts backslashes to forward slashes so that paths stored in the
+    Chroma metadata (which may originate on Windows) can be reliably
+    compared against paths coming from config.json.
+    """
+    return os.path.normpath(path).replace("\\", "/")
+
+
+# Keep a private alias for internal use
+_normalize_source_path = normalize_source_path
+
+
+def _get_ids_by_source(vectorstore: Chroma) -> Dict[str, List[str]]:
+    """Return a mapping of *normalized* source path -> list of chunk IDs."""
+    result = vectorstore.get(include=["metadatas"])
+    source_to_ids: Dict[str, List[str]] = {}
+    if result and result.get("ids") and result.get("metadatas"):
+        for doc_id, metadata in zip(result["ids"], result["metadatas"]):
+            if metadata and "source" in metadata:
+                norm = _normalize_source_path(metadata["source"])
+                source_to_ids.setdefault(norm, []).append(doc_id)
+    return source_to_ids
 
 
 def load_pdfs(pdf_paths: List[str]) -> List[Document]:
@@ -182,7 +213,12 @@ def get_or_create_vectorstore(
     if not force_recreate and vectorstore_exists(persist_directory):
         print("Loading existing vector store...")
         return load_chroma_vectorstore(persist_directory, embeddings)
-    
+
+    # Force recreate: delete old data first to avoid duplicates
+    if force_recreate and vectorstore_exists(persist_directory):
+        print("Clearing existing vector store for full rebuild...")
+        shutil.rmtree(persist_directory, ignore_errors=True)
+
     # Create new vector store
     print("Creating new vector store...")
     
@@ -201,6 +237,85 @@ def get_or_create_vectorstore(
     vectorstore = create_chroma_vectorstore(chunks, persist_directory, embeddings)
     
     return vectorstore
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Incremental Add / Remove / Sync
+# ─────────────────────────────────────────────────────────────────────────────
+
+def add_pdf_to_vectorstore(
+    vectorstore: Chroma,
+    pdf_path: str,
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+    embeddings: OpenAIEmbeddings = None
+) -> None:
+    """Embed a single PDF and add its chunks to an existing vectorstore."""
+    if embeddings is None:
+        embeddings = OpenAIEmbeddings()
+
+    docs = load_pdfs([pdf_path])
+    if docs:
+        chunks = chunk_documents(docs, chunk_size, chunk_overlap)
+        vectorstore.add_documents(chunks)
+        print(f"✓ Added {len(chunks)} chunks from {pdf_path}")
+
+
+def remove_pdf_from_vectorstore(
+    vectorstore: Chroma,
+    pdf_path: str,
+) -> None:
+    """Remove all embeddings that originated from *pdf_path*."""
+    norm_path = _normalize_source_path(pdf_path)
+    source_to_ids = _get_ids_by_source(vectorstore)
+    ids_to_delete = source_to_ids.get(norm_path, [])
+    if ids_to_delete:
+        vectorstore.delete(ids=ids_to_delete)
+        print(f"✓ Removed {len(ids_to_delete)} chunks for {pdf_path}")
+    else:
+        print(f"⚠ No chunks found for {pdf_path}")
+
+
+def sync_vectorstore(
+    vectorstore: Chroma,
+    pdf_paths: List[str],
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+    embeddings: OpenAIEmbeddings = None,
+) -> None:
+    """Bring the vectorstore in sync with *pdf_paths*.
+
+    - PDFs present in *pdf_paths* but missing from the store are embedded.
+    - Embeddings whose source PDF is no longer in *pdf_paths* are deleted.
+    """
+    if embeddings is None:
+        embeddings = OpenAIEmbeddings()
+
+    desired: Set[str] = {_normalize_source_path(p) for p in pdf_paths}
+    source_to_ids = _get_ids_by_source(vectorstore)
+    indexed: Set[str] = set(source_to_ids.keys())
+
+    to_add = desired - indexed
+    to_remove = indexed - desired
+
+    # Remove stale embeddings
+    for source in to_remove:
+        ids = source_to_ids[source]
+        vectorstore.delete(ids=ids)
+        print(f"✓ Sync: removed {len(ids)} chunks for {source}")
+
+    # Embed new documents
+    if to_add:
+        paths_to_load = [p for p in pdf_paths
+                         if _normalize_source_path(p) in to_add]
+        docs = load_pdfs(paths_to_load)
+        if docs:
+            chunks = chunk_documents(docs, chunk_size, chunk_overlap)
+            vectorstore.add_documents(chunks)
+            print(f"✓ Sync: added {len(chunks)} chunks for {len(paths_to_load)} new PDF(s)")
+
+    if not to_add and not to_remove:
+        print("✓ Vectorstore is already in sync.")
 
 
 def get_retriever(vectorstore: Chroma, k: int = 3):
