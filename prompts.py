@@ -2,9 +2,19 @@
 Prompt templates for the Health Assistant.
 
 All LLM prompts are centralized here for easy maintenance and review.
+Each constant uses ``str.format()`` placeholders where dynamic content
+is injected at runtime.
+
+Constants:
+    SYSTEM_PROMPT: Instructions given to the agent at the start of every
+        invocation.  Describes available tools and usage strategy.
+    SUMMARY_PROMPT: Template for generating document summaries.
+        Placeholder: ``{content}``
+    LAB_ANALYSIS_PROMPT: Template for analyzing uploaded lab reports.
+        Placeholder: ``{report_text}``
 """
 
-SYSTEM_PROMPT = """You are a helpful Health Assistant with access to the following tools:
+SYSTEM_PROMPT: str = """You are a helpful Health Assistant with access to the following tools:
 
 - search_knowledge_base: Search the user's personal health document library
 - search_web: Search the web for health information
@@ -26,13 +36,13 @@ Always be helpful and remind users to consult healthcare professionals for
 medical decisions.
 """
 
-SUMMARY_PROMPT = (
+SUMMARY_PROMPT: str = (
     "Provide a comprehensive summary of the following health document. "
     "Include main topics, key points, and important information.\n\n"
     "Document content:\n{content}\n\nSummary:"
 )
 
-LAB_ANALYSIS_PROMPT = """You are a medical AI assistant analyzing lab results.
+LAB_ANALYSIS_PROMPT: str = """You are a medical AI assistant analyzing lab results.
 
 Please analyze the following lab report and provide:
 
