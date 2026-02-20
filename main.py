@@ -2,6 +2,7 @@
 Health Assistant - Streamlit App with Authentication
 Multi-user app with login and user-specific data
 Minimalist Nordic Design
+Refactored: Tool Calling with LangChain Agent
 """
 
 import streamlit as st
@@ -16,8 +17,8 @@ from datetime import datetime
 
 from pypdf import PdfReader
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from serpapi import GoogleSearch
 
 from vector_store import (
@@ -95,7 +96,6 @@ if "authentication_status" not in st.session_state or st.session_state["authenti
         st.markdown("---")
         st.markdown("##### Sign In")
 
-        # Use authenticator's built-in login
         authenticator.login(location='sidebar')
 
         if st.session_state.get("authentication_status") == False:
@@ -160,27 +160,21 @@ if "current_user" not in st.session_state or st.session_state.current_user != us
     st.session_state.current_user = username
     st.session_state.file_uploader_key = 0
     st.session_state.journal_form_key = 0
-    st.session_state.pdf_summary = ""
-    st.session_state.lab_analysis = ""
-    st.session_state.lab_error = None
     st.session_state.editing_entry = None
     st.session_state.conversation_history = []
+    st.session_state.agent_messages = []  # LangChain message history for the agent
     st.session_state.question_counter = 0
 
 if "file_uploader_key" not in st.session_state:
     st.session_state.file_uploader_key = 0
 if "journal_form_key" not in st.session_state:
     st.session_state.journal_form_key = 0
-if "pdf_summary" not in st.session_state:
-    st.session_state.pdf_summary = ""
-if "lab_analysis" not in st.session_state:
-    st.session_state.lab_analysis = ""
-if "lab_error" not in st.session_state:
-    st.session_state.lab_error = None
 if "editing_entry" not in st.session_state:
     st.session_state.editing_entry = None
 if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
+if "agent_messages" not in st.session_state:
+    st.session_state.agent_messages = []
 if "question_counter" not in st.session_state:
     st.session_state.question_counter = 0
 
@@ -221,7 +215,6 @@ def initialize_vectorstore():
         chunk_overlap=config["chunking"]["chunk_overlap"],
         force_recreate=False
     )
-    # Sync with current config (handles missed adds/deletes from crashes, etc.)
     sync_vectorstore(
         vectorstore=vectorstore,
         pdf_paths=config["pdf_files"],
@@ -246,99 +239,181 @@ with st.spinner("Loading..."):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# RAG CHAIN SETUP
+# TOOL DEFINITIONS
 # ═══════════════════════════════════════════════════════════════════════════════
-prompt = ChatPromptTemplate.from_template(
-    """Answer using ONLY the context below.
-If the answer is not in the context, say "I don't know."
+@tool
+def search_knowledge_base(query: str) -> str:
+    """Search the health knowledge base for information from uploaded medical
+    documents. Use this tool when the user asks a health question that might
+    be answered by their personal document library."""
+    docs = retriever.invoke(query)
+    if not docs:
+        return "No relevant information found in the knowledge base."
+    return "\n\n".join(doc.page_content for doc in docs)
 
-Context:
-{context}
 
-Question:
-{question}
+@tool
+def search_web(query: str) -> str:
+    """Search the web for health information. Use this when the knowledge base
+    does not contain the answer, or the user explicitly asks for web results."""
+    params = {
+        "engine": "google",
+        "q": query,
+        "api_key": SERPAPI_API_KEY,
+    }
+    try:
+        result = GoogleSearch(params).get_dict()
+        snippets = []
+        for item in result.get("organic_results", [])[:3]:
+            title = item.get("title", "")
+            snippet = item.get("snippet", "")
+            link = item.get("link", "")
+            if title and snippet:
+                snippets.append(f"**{title}**\n{snippet}\nURL: {link}")
+        return "\n\n".join(snippets) if snippets else "No web results found."
+    except Exception:
+        return "Web search failed. Please try again."
+
+
+@tool
+def summarize_document(filename: str) -> str:
+    """Summarize a specific PDF document from the knowledge base. The user may
+    refer to the document by its filename (e.g. 'nutrition_guide.pdf'). Use
+    this tool when the user asks for a summary or overview of a document."""
+    # Find matching PDF path from config
+    matched_path = None
+    for pdf_path in config["pdf_files"]:
+        if filename.lower() in os.path.basename(pdf_path).lower():
+            matched_path = pdf_path
+            break
+
+    if not matched_path:
+        available = ", ".join(os.path.basename(p) for p in config["pdf_files"])
+        return f"Document '{filename}' not found. Available documents: {available}"
+
+    try:
+        normalized = normalize_source_path(matched_path)
+        docs = vectorstore.similarity_search(
+            "summary of document", k=10, filter={"source": normalized}
+        )
+        if not docs:
+            docs = vectorstore.similarity_search(
+                "summary of document", k=10, filter={"source": matched_path}
+            )
+        if not docs:
+            return f"No content found for {os.path.basename(matched_path)}"
+
+        combined_text = "\n\n".join(doc.page_content for doc in docs)
+
+        summary_prompt = (
+            "Provide a comprehensive summary of the following health document. "
+            "Include main topics, key points, and important information.\n\n"
+            f"Document content:\n{combined_text[:SUMMARY_MAX_CHARS]}\n\nSummary:"
+        )
+        response = llm.invoke(summary_prompt)
+        return response.content
+    except Exception as e:
+        return f"Error generating summary: {str(e)}"
+
+
+@tool
+def analyze_lab_report(report_text: str) -> str:
+    """Analyze a medical lab report. The report_text parameter should contain
+    the extracted text from a lab report PDF. Use this tool when the user
+    uploads a lab report and asks for analysis of their results."""
+    if not report_text.strip():
+        return "The report appears to be empty or could not be read."
+
+    analysis_prompt = f"""You are a medical AI assistant analyzing lab results.
+
+Please analyze the following lab report and provide:
+
+1. **Key Findings**: List the main test results with their values
+2. **Normal vs. Abnormal**: Identify which values are outside normal ranges
+3. **Health Implications**: Explain what the results might indicate
+4. **Recommendations**: Suggest next steps
+
+IMPORTANT: This is for informational purposes only. Always recommend consulting with a healthcare provider.
+
+Lab Report:
+{report_text[:LAB_REPORT_MAX_CHARS]}
+
+Analysis:"""
+
+    response = llm.invoke(analysis_prompt)
+    return response.content
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AGENT SETUP
+# ═══════════════════════════════════════════════════════════════════════════════
+SYSTEM_PROMPT = """You are a helpful Health Assistant with access to the following tools:
+
+- search_knowledge_base: Search the user's personal health document library
+- search_web: Search the web for health information
+- summarize_document: Summarize a specific document from the knowledge base
+- analyze_lab_report: Analyze medical lab report text
+
+When the user asks a health question, search the knowledge base first. If the
+information found is incomplete or could benefit from additional context, also
+search the web to supplement the answer. Combine insights from both sources
+to provide the most comprehensive response possible.
+
+When the user provides lab report text (from an uploaded PDF), use the
+analyze_lab_report tool. You may also search the knowledge base or web
+to provide additional context about specific test results.
+
+When the user asks for a summary of a document, use the summarize_document tool.
+
+Always be helpful and remind users to consult healthcare professionals for
+medical decisions.
 """
-)
 
-chain = (
-    {"context": retriever, "question": RunnablePassthrough()}
-    | prompt
-    | llm
-)
+tools = [search_knowledge_base, search_web, summarize_document, analyze_lab_report]
+tools_by_name = {t.name: t for t in tools}
+llm_with_tools = llm.bind_tools(tools)
+
+
+def run_agent(user_input: str, messages: list) -> str:
+    """Run the agent loop. The LLM decides which tools to call and when to
+    produce a final answer.
+
+    Args:
+        user_input: The user's message (may include attached PDF text).
+        messages: The LangChain message list (mutated in-place).
+
+    Returns:
+        The assistant's final text answer.
+    """
+    messages.append(HumanMessage(content=user_input))
+
+    # Agent loop: keep going until the LLM gives a text response with no tool calls
+    max_iterations = 5  # safety limit to prevent infinite loops
+    for _ in range(max_iterations):
+        response = llm_with_tools.invoke(
+            [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+        )
+        messages.append(response)
+
+        # No tool calls → we have the final answer
+        if not response.tool_calls:
+            return response.content
+
+        # Execute each tool call
+        for tool_call in response.tool_calls:
+            tool_fn = tools_by_name[tool_call["name"]]
+            result = tool_fn.invoke(tool_call["args"])
+            messages.append(
+                ToolMessage(content=result, tool_call_id=tool_call["id"])
+            )
+
+    # If we hit the iteration limit, return whatever the last response was
+    return response.content or "I wasn't able to complete the request. Please try again."
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
-def serpapi_search(query: str, max_results: int = 3) -> list:
-    """Search the web using SerpAPI."""
-    params = {
-        "engine": "google",
-        "q": query,
-        "api_key": SERPAPI_API_KEY
-    }
-
-    try:
-        search = GoogleSearch(params)
-        result = search.get_dict()
-        results = []
-
-        if "organic_results" in result:
-            for item in result["organic_results"][:max_results]:
-                title = item.get("title", "")
-                snippet = item.get("snippet", "")
-                link = item.get("link", "")
-                if title and snippet:
-                    results.append({
-                        "title": title,
-                        "snippet": snippet,
-                        "url": link
-                    })
-
-        return results
-    except Exception:
-        return []
-
-
-def summarize_pdf(pdf_path: str) -> str:
-    """Generate a summary of a PDF using the vectorstore."""
-    try:
-        # Normalize the path to match what Chroma stores in metadata
-        normalized = normalize_source_path(pdf_path)
-        docs = vectorstore.similarity_search(
-            "summary of document",
-            k=10,
-            filter={"source": normalized}
-        )
-
-        # Fallback: try the raw path in case it was stored un-normalized
-        if not docs:
-            docs = vectorstore.similarity_search(
-                "summary of document",
-                k=10,
-                filter={"source": pdf_path}
-            )
-
-        if not docs:
-            return f"No content found for {os.path.basename(pdf_path)}"
-
-        combined_text = "\n\n".join([doc.page_content for doc in docs])
-
-        summary_prompt = f"""Provide a comprehensive summary of the following health document.
-Include main topics, key points, and important information.
-
-Document content:
-{combined_text[:SUMMARY_MAX_CHARS]}
-
-Summary:"""
-
-        response = llm.invoke(summary_prompt)
-        return response.content
-
-    except Exception as e:
-        return f"Error generating summary: {str(e)}"
-
-
 def render_config_item(label: str, value) -> None:
     """Render a single config item in the sidebar."""
     st.markdown(f"""
@@ -449,23 +524,25 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════════════
 st.title("Health Assistant")
 
-# Create tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Ask Question",
-    "Summarize",
-    "Analyse Lab Report",
+# Three tabs: Chat (agent-powered), Manage Documents, Journal
+tab1, tab2, tab3 = st.tabs([
+    "Chat",
     "Manage Documents",
     "Journal"
 ])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 1: ASK HEALTH QUESTION (CHAT STYLE)
+# TAB 1: CHAT (AGENT-POWERED)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.markdown("### Ask a Health Question")
-    st.caption("Get answers from your knowledge base or the web")
+    st.markdown("### Health Chat")
+    st.caption(
+        "Ask questions, request document summaries, or upload a lab report "
+        "for analysis — the AI decides which tool to use."
+    )
 
+    # Display conversation history
     if st.session_state.conversation_history:
         st.markdown("---")
         for qa in st.session_state.conversation_history:
@@ -483,22 +560,35 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
 
-            # Sources if available
-            if qa.get('sources'):
-                for source_label, source_url in qa['sources']:
-                    st.caption(f"  {source_label}: {source_url}")
+            # Tools used
+            if qa.get("tools_used"):
+                tools_str = ", ".join(qa["tools_used"])
+                st.caption(f"🔧 Tools used: {tools_str}")
+
+            # Sources
+            if qa.get("sources"):
+                for i, source in enumerate(qa["sources"], 1):
+                    if source == "Knowledge Base":
+                        st.caption(f"📄 Source: Knowledge Base")
+                    else:
+                        st.caption(f"🔗 Source {i}: {source}")
 
         st.markdown("---")
 
-    # Input for new question (full width)
+    # Input area
     question = st.text_input(
         "Question",
-        placeholder="Type your health question here...",
+        placeholder="e.g. What does my knowledge base say about blood pressure?",
         key=f"health_question_{st.session_state.question_counter}",
         label_visibility="collapsed"
     )
 
-    # Buttons side by side below input
+    uploaded_lab = st.file_uploader(
+        "Attach a lab report (optional)",
+        type=["pdf"],
+        key=f"chat_upload_{st.session_state.question_counter}",
+    )
+
     col_ask, col_clear = st.columns(2)
 
     with col_ask:
@@ -507,45 +597,68 @@ with tab1:
     with col_clear:
         if st.button("Clear Chat", key="clear_btn", use_container_width=True):
             st.session_state.conversation_history = []
+            st.session_state.agent_messages = []
             st.rerun()
 
     if ask_button:
         if question:
-            with st.spinner("Searching..."):
+            with st.spinner("Thinking..."):
                 ask_error = None
                 try:
-                    response = chain.invoke(question)
-                    answer_text = response.content.strip()
-                    sources = []
-
-                    if answer_text.lower() in ["i don't know.", "i don't know", "unknown"]:
-                        web_results = serpapi_search(question)
-
-                        if web_results:
-                            combined_answer = "Here's what I found:\n\n"
-                            for result in web_results:
-                                combined_answer += f"**{result['title']}**\n{result['snippet']}\n\n"
-
-                            answer_text = combined_answer
-                            sources = [
-                                (f"Source {i}", result['url'])
-                                for i, result in enumerate(web_results, 1)
-                            ]
+                    # If a PDF is attached, extract text and include it
+                    user_message = question
+                    if uploaded_lab:
+                        reader = PdfReader(BytesIO(uploaded_lab.getbuffer()))
+                        pdf_text = "\n".join(
+                            page.extract_text() or "" for page in reader.pages
+                        )
+                        if pdf_text.strip():
+                            user_message = (
+                                f"{question}\n\n"
+                                f"[Attached lab report text]\n{pdf_text}"
+                            )
                         else:
-                            answer_text = "I couldn't find enough information to answer this question."
-                            sources = []
-                    else:
-                        sources = [("Source", "Knowledge Base")]
+                            ask_error = (
+                                "Could not extract text from the uploaded PDF. "
+                                "The file may be image-based."
+                            )
 
-                    # Add to conversation history
-                    st.session_state.conversation_history.append({
-                        'question': question,
-                        'answer': answer_text,
-                        'sources': sources
-                    })
+                    if not ask_error:
+                        # Snapshot tool call names before the agent runs
+                        msgs_before = len(st.session_state.agent_messages)
 
-                    # Increment counter to clear input box
-                    st.session_state.question_counter += 1
+                        answer_text = run_agent(
+                            user_message, st.session_state.agent_messages
+                        )
+
+                        # Identify which tools were called and extract sources
+                        tools_used = []
+                        sources = []
+                        for msg in st.session_state.agent_messages[msgs_before:]:
+                            if isinstance(msg, AIMessage) and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    if tc["name"] not in tools_used:
+                                        tools_used.append(tc["name"])
+                            # Extract URLs from search_web tool results
+                            if isinstance(msg, ToolMessage) and "URL:" in msg.content:
+                                for line in msg.content.split("\n"):
+                                    if line.strip().startswith("URL:"):
+                                        url = line.strip().replace("URL:", "").strip()
+                                        if url:
+                                            sources.append(url)
+
+                        # If no web sources, but knowledge base was used
+                        if not sources and "search_knowledge_base" in tools_used:
+                            sources = ["Knowledge Base"]
+
+                        st.session_state.conversation_history.append({
+                            "question": question,
+                            "answer": answer_text,
+                            "tools_used": tools_used,
+                            "sources": sources,
+                        })
+
+                        st.session_state.question_counter += 1
 
                 except Exception as e:
                     ask_error = str(e)
@@ -559,107 +672,9 @@ with tab1:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 2: SUMMARIZE PDF
+# TAB 2: MANAGE DOCUMENTS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.markdown("### Summarize Document")
-    st.caption("Generate AI summaries of your health documents")
-
-    if config["pdf_files"]:
-        selected_pdf = st.selectbox(
-            "Select document",
-            options=config["pdf_files"],
-            format_func=lambda x: os.path.basename(x),
-            key="pdf_select"
-        )
-
-        if st.button("Summarize", key="summarize_btn"):
-            with st.spinner("Generating summary..."):
-                summary = summarize_pdf(selected_pdf)
-                st.session_state.pdf_summary = summary
-
-        # Display summary
-        if st.session_state.pdf_summary:
-            st.markdown("#### Summary")
-            with st.container(border=True):
-                st.markdown(st.session_state.pdf_summary)
-    else:
-        st.info("No documents available to summarize")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 3: ANALYSE LAB REPORT
-# ─────────────────────────────────────────────────────────────────────────────
-with tab3:
-    st.markdown("### Analyse Lab Report")
-    st.caption("Upload your blood work or lab results for AI analysis")
-
-    uploaded_lab_pdf = st.file_uploader(
-        "Upload Lab Report",
-        type=['pdf'],
-        key="lab_pdf_upload",
-        help="Upload your blood work, lab results, or medical test report"
-    )
-
-    if uploaded_lab_pdf is not None:
-        st.success(f"Uploaded: {uploaded_lab_pdf.name}")
-
-        if st.button("Analyse", key="analyse_btn"):
-            with st.spinner("Analyzing report..."):
-                try:
-                    pdf_reader = PdfReader(BytesIO(uploaded_lab_pdf.getbuffer()))
-
-                    pdf_text = ""
-                    for page in pdf_reader.pages:
-                        pdf_text += page.extract_text() + "\n"
-
-                    if not pdf_text.strip():
-                        st.session_state.lab_analysis = None
-                        st.session_state.lab_error = "Could not extract text from PDF. The file may be image-based."
-                    else:
-                        analysis_prompt = f"""You are a medical AI assistant analyzing lab results.
-
-Please analyze the following lab report and provide:
-
-1. **Key Findings**: List the main test results with their values
-2. **Normal vs. Abnormal**: Identify which values are outside normal ranges
-3. **Health Implications**: Explain what the results might indicate
-4. **Recommendations**: Suggest next steps
-
-IMPORTANT: This is for informational purposes only. Always recommend consulting with a healthcare provider.
-
-Lab Report:
-{pdf_text[:LAB_REPORT_MAX_CHARS]}
-
-Analysis:"""
-
-                        analysis_response = llm.invoke(analysis_prompt)
-                        st.session_state.lab_analysis = analysis_response.content
-                        st.session_state.lab_error = None
-
-                except Exception as e:
-                    st.session_state.lab_analysis = None
-                    st.session_state.lab_error = f"Error analyzing PDF: {str(e)}"
-
-        # Display results
-        if st.session_state.lab_error:
-            st.error(st.session_state.lab_error)
-
-        if st.session_state.lab_analysis:
-            st.markdown("#### Analysis Results")
-            with st.container(border=True):
-                st.markdown(st.session_state.lab_analysis)
-
-            st.warning("""**⚠️ Medical Disclaimer**
-This analysis is for informational purposes only and should NOT be considered medical advice. Always consult with a qualified healthcare provider to interpret your lab results.""")
-    else:
-        st.info("Upload a PDF of your lab report to get started")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 4: MANAGE DOCUMENTS
-# ─────────────────────────────────────────────────────────────────────────────
-with tab4:
     st.markdown("### Manage Knowledge Base")
     st.caption("Upload PDFs to expand your health knowledge base")
 
@@ -688,19 +703,14 @@ with tab4:
             with col2:
                 if st.button("Delete", key=f"del_pdf_{idx}", use_container_width=True):
                     try:
-                        # 1. Remove embeddings from the vectorstore
                         remove_pdf_from_vectorstore(vectorstore, pdf_path)
-
-                        # 2. Remove from config and session state
                         st.session_state.pdf_files.remove(pdf_path)
                         config["pdf_files"] = st.session_state.pdf_files
                         save_config(config)
 
-                        # 3. Delete physical file
                         if os.path.exists(pdf_path):
                             os.remove(pdf_path)
 
-                        # 4. Clear vectorstore cache so retriever is recreated
                         st.cache_resource.clear()
                     except Exception as e:
                         st.error(f"Error deleting file: {str(e)}")
@@ -730,23 +740,19 @@ with tab4:
             add_success = False
             with st.spinner("Adding document to knowledge base..."):
                 try:
-                    # 1. Create pdfs directory if it doesn't exist
                     pdf_dir = "pdfs"
                     os.makedirs(pdf_dir, exist_ok=True)
 
-                    # 2. Save PDF file to disk
                     pdf_path = os.path.join(pdf_dir, uploaded_pdf.name)
 
                     with open(pdf_path, "wb") as f:
                         f.write(uploaded_pdf.getbuffer())
 
-                    # 3. Update config and session state (avoid duplicates)
                     if pdf_path not in st.session_state.pdf_files:
                         st.session_state.pdf_files.append(pdf_path)
                         config["pdf_files"] = st.session_state.pdf_files
                         save_config(config)
 
-                    # 4. Embed the new document into the vectorstore
                     add_pdf_to_vectorstore(
                         vectorstore,
                         pdf_path,
@@ -754,9 +760,7 @@ with tab4:
                         chunk_overlap=config["chunking"]["chunk_overlap"],
                     )
 
-                    # 5. Clear vectorstore cache so retriever is recreated
                     st.cache_resource.clear()
-
                     add_success = True
                 except Exception as e:
                     st.error(f"❌ Error adding document: {str(e)}")
@@ -768,9 +772,9 @@ with tab4:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 5: HEALTH JOURNAL
+# TAB 3: HEALTH JOURNAL
 # ─────────────────────────────────────────────────────────────────────────────
-with tab5:
+with tab3:
     st.markdown("### Health Journal")
     st.caption("Track your health journey with notes and attachments")
 
@@ -848,7 +852,6 @@ with tab5:
 
             with st.container(border=True):
                 if is_editing:
-                    # Edit mode
                     st.markdown("**✏️ Editing Entry**")
 
                     edited_title = st.text_input(
@@ -882,7 +885,6 @@ with tab5:
                             st.session_state.editing_entry = None
                             st.rerun()
                 else:
-                    # Display mode
                     st.markdown(f"**{entry['date']} — {entry.get('title', 'Untitled')}{attachment_icon}**")
                     st.markdown(entry['entry'])
 
@@ -904,7 +906,6 @@ with tab5:
                                     key=f"dl_{entry['timestamp']}"
                                 )
 
-                    # Edit and Delete buttons
                     col_edit, col_delete = st.columns(2)
                     with col_edit:
                         if st.button("Edit Entry", key=f"edit_{entry['timestamp']}", use_container_width=True):

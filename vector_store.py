@@ -82,14 +82,7 @@ def chunk_documents(
 ) -> List[Document]:
     """
     Split documents into smaller chunks.
-    
-    Args:
-        documents: List of documents to chunk
-        chunk_size: Maximum size of each chunk
-        chunk_overlap: Number of characters to overlap between chunks
-        
-    Returns:
-        List of chunked documents
+ 
     """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -190,7 +183,6 @@ def get_or_create_vectorstore(
     """
     Load existing vector store or create a new one from PDFs.
     
-    This is the main function you'll use. It handles the entire workflow:
     - Checks if vector store exists
     - Loads from disk if available (and not force_recreate)
     - Otherwise, loads PDFs, chunks them, and creates new vector store
