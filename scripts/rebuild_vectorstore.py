@@ -8,21 +8,28 @@ Use this when you've:
 - Want to refresh the embeddings
 """
 
+import os
+import sys
+
 from dotenv import load_dotenv
 import json
 
-from vector_store import get_or_create_vectorstore
+# Allow running from any directory by adding project root to path
+_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+sys.path.insert(0, _ROOT)
+
+from core.vector_store import get_or_create_vectorstore
 
 
 # Load environment variables
-load_dotenv()
+load_dotenv(os.path.join(_ROOT, ".env"))
 
 
 def rebuild_vectorstore():
     """Force rebuild of the vector store."""
-    
+
     # Load configuration
-    with open("config.json", 'r') as f:
+    with open(os.path.join(_ROOT, "config.json"), 'r') as f:
         config = json.load(f)
     
     print("\n" + "="*60)

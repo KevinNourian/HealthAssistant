@@ -7,12 +7,12 @@ and health journaling.  Minimalist Nordic design.
 This is the main entry point.  It wires together all modules and renders
 the Streamlit UI.  Business logic lives in the other modules:
 
-* ``prompts.py``   – LLM prompt templates
-* ``config.py``    – configuration loading and constants
-* ``auth.py``      – authentication setup
-* ``user_data.py`` – user data persistence and session state
-* ``tools.py``     – LangChain tool definitions
-* ``agent.py``     – agent loop orchestration
+* ``core/prompts.py``   – LLM prompt templates
+* ``core/config.py``    – configuration loading and constants
+* ``core/auth.py``      – authentication setup
+* ``core/user_data.py`` – user data persistence and session state
+* ``core/tools.py``     – LangChain tool definitions
+* ``core/agent.py``     – agent loop orchestration
 """
 
 import logging
@@ -27,12 +27,12 @@ from pypdf import PdfReader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, ToolMessage
 
-from config import load_config, save_config
-from auth import load_authenticator, render_login
-from user_data import init_session_state, save_user_data
-from tools import create_tools
-from agent import bind_tools, run_agent
-from vector_store import (
+from core.config import load_config, save_config
+from core.auth import load_authenticator, render_login
+from core.user_data import init_session_state, save_user_data
+from core.tools import create_tools
+from core.agent import bind_tools, run_agent
+from core.vector_store import (
     get_or_create_vectorstore,
     get_retriever,
     add_pdf_to_vectorstore,
@@ -538,7 +538,7 @@ with tab2:
             add_success: bool = False
             with st.spinner("Adding document to knowledge base..."):
                 try:
-                    pdf_dir: str = "pdfs"
+                    pdf_dir: str = "data"
                     os.makedirs(pdf_dir, exist_ok=True)
 
                     pdf_path = os.path.join(pdf_dir, uploaded_pdf.name)

@@ -18,9 +18,9 @@ from langchain_core.tools import tool, BaseTool
 from langchain_openai import ChatOpenAI
 from serpapi import GoogleSearch
 
-from config import SUMMARY_MAX_CHARS, LAB_REPORT_MAX_CHARS
-from prompts import SUMMARY_PROMPT, LAB_ANALYSIS_PROMPT
-from vector_store import normalize_source_path
+from core.config import SUMMARY_MAX_CHARS, LAB_REPORT_MAX_CHARS
+from core.prompts import SUMMARY_PROMPT, LAB_ANALYSIS_PROMPT
+from core.vector_store import normalize_source_path
 
 logger = logging.getLogger(__name__)
 

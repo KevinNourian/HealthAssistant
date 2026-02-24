@@ -15,6 +15,8 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
+_USER_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "user_data")
+
 
 def _user_data_path(username: str) -> str:
     """Return the JSON file path for the given user.
@@ -23,9 +25,10 @@ def _user_data_path(username: str) -> str:
         username: The authenticated username.
 
     Returns:
-        A relative file path string.
+        An absolute file path string inside the user_data/ directory.
     """
-    return f"user_data_{username}.json"
+    os.makedirs(_USER_DATA_DIR, exist_ok=True)
+    return os.path.join(_USER_DATA_DIR, f"user_data_{username}.json")
 
 
 def load_user_data(username: str) -> dict[str, Any]:

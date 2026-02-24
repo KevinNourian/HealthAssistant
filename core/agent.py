@@ -19,7 +19,7 @@ from langchain_core.messages import (
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
-from prompts import SYSTEM_PROMPT
+from core.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 

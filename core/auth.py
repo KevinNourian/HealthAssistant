@@ -6,6 +6,7 @@ to provide cookie-based session management.
 """
 
 import logging
+import os
 
 import streamlit as st
 import streamlit_authenticator as stauth
@@ -13,6 +14,8 @@ import yaml
 from yaml.loader import SafeLoader
 
 logger = logging.getLogger(__name__)
+
+_CREDS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "credentials.yaml")
 
 
 def load_authenticator() -> stauth.Authenticate:
@@ -26,7 +29,7 @@ def load_authenticator() -> stauth.Authenticate:
             also calls ``st.stop()`` so the app halts gracefully.
     """
     try:
-        with open("credentials.yaml") as file:
+        with open(_CREDS_PATH) as file:
             config_auth: dict = yaml.load(file, Loader=SafeLoader)
         logger.info("Credentials loaded successfully")
     except FileNotFoundError:
