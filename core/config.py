@@ -8,6 +8,7 @@ the list of PDF documents in the knowledge base.
 
 import json
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,38 @@ def load_config(config_path: str = "config.json") -> dict[str, Any]:
     except json.JSONDecodeError as e:
         logger.error("Invalid JSON in configuration file: %s", e)
         raise
+
+
+def validate_api_keys() -> None:
+    """Validate that required API keys are present in the environment.
+
+    Reads ``OPENAI_API_KEY`` and ``SERPAPI_API_KEY`` from environment
+    variables (typically loaded from ``.env`` via ``python-dotenv``).
+
+    Raises:
+        EnvironmentError: If ``OPENAI_API_KEY`` is missing or does not
+            look like a valid OpenAI key (``sk-...``).
+    """
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not openai_key:
+        raise EnvironmentError(
+            "OPENAI_API_KEY is not set. "
+            "Add it to your .env file and restart the app."
+        )
+    if not openai_key.startswith("sk-"):
+        raise EnvironmentError(
+            "OPENAI_API_KEY appears invalid — expected a key starting with "
+            "'sk-'. Check your .env file."
+        )
+
+    serpapi_key = os.getenv("SERPAPI_API_KEY", "").strip()
+    if not serpapi_key:
+        logger.warning(
+            "SERPAPI_API_KEY is not set — the web search tool will be "
+            "unavailable"
+        )
+    else:
+        logger.info("API key validation passed")
 
 
 def save_config(

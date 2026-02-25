@@ -27,7 +27,8 @@ from pypdf import PdfReader
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, ToolMessage
 
-from core.config import load_config, save_config
+from core.config import load_config, save_config, validate_api_keys
+from core.rate_limiter import check_and_record, RateLimitExceeded
 from core.auth import load_authenticator, render_login
 from core.user_data import init_session_state, save_user_data
 from core.tools import create_tools
@@ -83,6 +84,13 @@ load_css(os.path.join(os.path.dirname(__file__), "assets", "style.css"))
 # ENVIRONMENT & CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 load_dotenv()
+
+try:
+    validate_api_keys()
+except EnvironmentError as e:
+    st.error(str(e))
+    st.stop()
+
 SERPAPI_API_KEY: str = os.getenv("SERPAPI_API_KEY", "")
 
 config: dict[str, Any] = load_config()
@@ -393,6 +401,13 @@ with tab1:
                 with st.spinner("Thinking..."):
                     ask_error: str | None = None
                     try:
+                        # ── Rate limit check ──────────────────────────────
+                        check_and_record(
+                            username,
+                            config["rate_limit"]["max_requests"],
+                            config["rate_limit"]["window_seconds"],
+                        )
+
                         # ── Guardrail 2: Health topic scope (LLM check) ───
                         # Skip when a lab PDF is attached — context is clear.
                         if not uploaded_lab and not is_health_related(
@@ -488,6 +503,11 @@ with tab1:
 
                                 st.session_state.question_counter += 1
 
+                    except RateLimitExceeded as e:
+                        st.warning(str(e))
+                        logger.warning(
+                            "Rate limit hit for user '%s'", username
+                        )
                     except Exception as e:
                         logger.error("Error during agent invocation: %s", e)
                         ask_error = str(e)
