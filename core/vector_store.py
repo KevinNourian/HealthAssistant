@@ -12,6 +12,9 @@ from pathlib import Path
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.retrievers import BM25Retriever
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from langchain_core.retrievers import BaseRetriever
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -313,12 +316,87 @@ def sync_vectorstore(
 def get_retriever(vectorstore: Chroma, k: int = 3):
     """
     Get a retriever from the vector store.
-    
+
     Args:
         vectorstore: Chroma vector store instance
         k: Number of documents to retrieve (default: 3)
-        
+
     Returns:
         Retriever configured for similarity search
     """
     return vectorstore.as_retriever(search_kwargs={"k": k})
+
+
+class HybridRetriever(BaseRetriever):
+    """Retriever that combines BM25 (keyword) and vector (semantic) search.
+
+    Results from both sub-retrievers are merged using Reciprocal Rank Fusion
+    (RRF), which produces a single ranked list that benefits from exact
+    keyword matches *and* semantic similarity.
+    """
+
+    bm25_retriever: BM25Retriever
+    vector_retriever: BaseRetriever
+    k: int = 3
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        # Retrieve from both sources
+        bm25_docs = self.bm25_retriever.invoke(query)
+        vector_docs = self.vector_retriever.invoke(query)
+
+        # --- Reciprocal Rank Fusion (RRF) ---
+        # Score each document as  sum( weight / (rank + 60) )  across lists.
+        # The constant 60 is the standard RRF smoothing factor.
+        rrf_scores: Dict[str, float] = {}
+        doc_lookup: Dict[str, Document] = {}
+
+        for rank, doc in enumerate(bm25_docs):
+            key = doc.page_content
+            rrf_scores[key] = rrf_scores.get(key, 0.0) + 0.5 / (rank + 60)
+            doc_lookup[key] = doc
+
+        for rank, doc in enumerate(vector_docs):
+            key = doc.page_content
+            rrf_scores[key] = rrf_scores.get(key, 0.0) + 0.5 / (rank + 60)
+            doc_lookup[key] = doc
+
+        # Sort by descending RRF score and return top-k
+        sorted_keys = sorted(rrf_scores, key=rrf_scores.get, reverse=True)
+        return [doc_lookup[k] for k in sorted_keys[: self.k]]
+
+
+def get_hybrid_retriever(vectorstore: Chroma, k: int = 3) -> HybridRetriever:
+    """Get a hybrid retriever combining BM25 (keyword) and vector (semantic) search.
+
+    Fetches all stored chunks from Chroma to build an in-memory BM25 index,
+    then combines it with the Chroma vector retriever using Reciprocal Rank
+    Fusion (RRF) with equal weighting.
+
+    Args:
+        vectorstore: Chroma vector store instance.
+        k: Number of documents each sub-retriever should return (default: 3).
+
+    Returns:
+        A ``HybridRetriever`` that merges BM25 and vector search results.
+    """
+    # Fetch all chunks from Chroma to build the BM25 index
+    result = vectorstore.get(include=["documents", "metadatas"])
+    docs = [
+        Document(page_content=text, metadata=meta)
+        for text, meta in zip(result["documents"], result["metadatas"])
+    ]
+
+    # BM25: keyword/lexical retriever (in-memory)
+    bm25_retriever = BM25Retriever.from_documents(docs)
+    bm25_retriever.k = k
+
+    # Vector: semantic retriever backed by Chroma
+    vector_retriever = vectorstore.as_retriever(search_kwargs={"k": k})
+
+    return HybridRetriever(
+        bm25_retriever=bm25_retriever,
+        vector_retriever=vector_retriever,
+        k=k,
+    )

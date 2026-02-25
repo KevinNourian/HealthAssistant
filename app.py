@@ -32,9 +32,10 @@ from core.auth import load_authenticator, render_login
 from core.user_data import init_session_state, save_user_data
 from core.tools import create_tools
 from core.agent import bind_tools, run_agent
+from core.guardrails import check_for_crisis, is_health_related, CrisisType
 from core.vector_store import (
     get_or_create_vectorstore,
-    get_retriever,
+    get_hybrid_retriever,
     add_pdf_to_vectorstore,
     remove_pdf_from_vectorstore,
     sync_vectorstore,
@@ -135,7 +136,7 @@ def initialize_vectorstore():
         chunk_size=config["chunking"]["chunk_size"],
         chunk_overlap=config["chunking"]["chunk_overlap"],
     )
-    retriever = get_retriever(vectorstore, k=config["retriever"]["k"])
+    retriever = get_hybrid_retriever(vectorstore, k=config["retriever"]["k"])
     logger.info("Vector store ready")
     return vectorstore, retriever
 
@@ -371,97 +372,135 @@ with tab1:
 
     if ask_button:
         if question:
-            with st.spinner("Thinking..."):
-                ask_error: str | None = None
-                try:
-                    # If a PDF is attached, extract text and include it
-                    user_message: str = question
-                    if uploaded_lab:
-                        logger.info(
-                            "Extracting text from uploaded PDF: %s",
-                            uploaded_lab.name,
-                        )
-                        reader = PdfReader(BytesIO(uploaded_lab.getbuffer()))
-                        pdf_text = "\n".join(
-                            page.extract_text() or ""
-                            for page in reader.pages
-                        )
-                        if pdf_text.strip():
-                            user_message = (
-                                f"{question}\n\n"
-                                f"[Attached lab report text]\n{pdf_text}"
+            # ── Guardrail 1: Crisis detection (regex, no LLM) ─────────────
+            crisis = check_for_crisis(question)
+            if crisis.detected:
+                if crisis.crisis_type == CrisisType.MENTAL_HEALTH_CRISIS:
+                    st.error(
+                        "It sounds like you may be going through a very "
+                        "difficult time. Please reach out for support "
+                        "right away — you don't have to face this alone."
+                    )
+                else:
+                    st.error(
+                        "This sounds like it could be a medical emergency. "
+                        "Please seek immediate help."
+                    )
+                for resource in crisis.resources:
+                    st.markdown(resource)
+            else:
+                out_of_scope: bool = False
+                with st.spinner("Thinking..."):
+                    ask_error: str | None = None
+                    try:
+                        # ── Guardrail 2: Health topic scope (LLM check) ───
+                        # Skip when a lab PDF is attached — context is clear.
+                        if not uploaded_lab and not is_health_related(
+                            question, llm
+                        ):
+                            out_of_scope = True
+                            logger.info(
+                                "Query rejected by topic scope guardrail"
                             )
                         else:
-                            ask_error = (
-                                "Could not extract text from the uploaded "
-                                "PDF. The file may be image-based."
-                            )
-                            logger.warning(
-                                "PDF text extraction returned empty content"
-                            )
+                            # If a PDF is attached, extract text and include it
+                            user_message: str = question
+                            if uploaded_lab:
+                                logger.info(
+                                    "Extracting text from uploaded PDF: %s",
+                                    uploaded_lab.name,
+                                )
+                                reader = PdfReader(
+                                    BytesIO(uploaded_lab.getbuffer())
+                                )
+                                pdf_text = "\n".join(
+                                    page.extract_text() or ""
+                                    for page in reader.pages
+                                )
+                                if pdf_text.strip():
+                                    user_message = (
+                                        f"{question}\n\n"
+                                        f"[Attached lab report text]\n"
+                                        f"{pdf_text}"
+                                    )
+                                else:
+                                    ask_error = (
+                                        "Could not extract text from the "
+                                        "uploaded PDF. The file may be "
+                                        "image-based."
+                                    )
+                                    logger.warning(
+                                        "PDF text extraction returned "
+                                        "empty content"
+                                    )
 
-                    if not ask_error:
-                        msgs_before: int = len(
-                            st.session_state.agent_messages
-                        )
+                            if not ask_error:
+                                msgs_before: int = len(
+                                    st.session_state.agent_messages
+                                )
 
-                        answer_text: str = run_agent(
-                            user_message,
-                            st.session_state.agent_messages,
-                            llm_with_tools,
-                            tools_by_name,
-                        )
+                                answer_text: str = run_agent(
+                                    user_message,
+                                    st.session_state.agent_messages,
+                                    llm_with_tools,
+                                    tools_by_name,
+                                )
 
-                        # Identify tools and extract sources
-                        tools_used: list[str] = []
-                        sources: list[str] = []
-                        for msg in st.session_state.agent_messages[
-                            msgs_before:
-                        ]:
-                            if (
-                                isinstance(msg, AIMessage)
-                                and msg.tool_calls
-                            ):
-                                for tc in msg.tool_calls:
-                                    if tc["name"] not in tools_used:
-                                        tools_used.append(tc["name"])
-                            if (
-                                isinstance(msg, ToolMessage)
-                                and "URL:" in msg.content
-                            ):
-                                for line in msg.content.split("\n"):
-                                    if line.strip().startswith("URL:"):
-                                        url = (
-                                            line.strip()
-                                            .replace("URL:", "")
-                                            .strip()
-                                        )
-                                        if url:
-                                            sources.append(url)
+                                # Identify tools and extract sources
+                                tools_used: list[str] = []
+                                sources: list[str] = []
+                                for msg in st.session_state.agent_messages[
+                                    msgs_before:
+                                ]:
+                                    if (
+                                        isinstance(msg, AIMessage)
+                                        and msg.tool_calls
+                                    ):
+                                        for tc in msg.tool_calls:
+                                            if tc["name"] not in tools_used:
+                                                tools_used.append(tc["name"])
+                                    if (
+                                        isinstance(msg, ToolMessage)
+                                        and "URL:" in msg.content
+                                    ):
+                                        for line in msg.content.split("\n"):
+                                            if line.strip().startswith("URL:"):
+                                                url = (
+                                                    line.strip()
+                                                    .replace("URL:", "")
+                                                    .strip()
+                                                )
+                                                if url:
+                                                    sources.append(url)
 
-                        if (
-                            not sources
-                            and "search_knowledge_base" in tools_used
-                        ):
-                            sources = ["Knowledge Base"]
+                                if (
+                                    not sources
+                                    and "search_knowledge_base" in tools_used
+                                ):
+                                    sources = ["Knowledge Base"]
 
-                        st.session_state.conversation_history.append({
-                            "question": question,
-                            "answer": answer_text,
-                            "tools_used": tools_used,
-                            "sources": sources,
-                        })
+                                st.session_state.conversation_history.append({
+                                    "question": question,
+                                    "answer": answer_text,
+                                    "tools_used": tools_used,
+                                    "sources": sources,
+                                })
 
-                        st.session_state.question_counter += 1
+                                st.session_state.question_counter += 1
 
-                except Exception as e:
-                    logger.error("Error during agent invocation: %s", e)
-                    ask_error = str(e)
+                    except Exception as e:
+                        logger.error("Error during agent invocation: %s", e)
+                        ask_error = str(e)
 
-            if ask_error:
-                st.error(f"Error: {ask_error}")
-            else:
-                st.rerun()
+                if out_of_scope:
+                    st.info(
+                        "This assistant is designed for health and wellness "
+                        "questions only. Please ask a health-related question."
+                    )
+                elif ask_error:
+                    st.error(f"Error: {ask_error}")
+                else:
+                    st.rerun()
         else:
             st.warning("Please enter a question")
 

@@ -53,7 +53,19 @@ def create_tools(
         that might be answered by their personal document library."""
         logger.info("search_knowledge_base called with query: %s", query)
         try:
-            docs = retriever.invoke(query)
+            # Query rewriting: rephrase the conversational query into a
+            # concise, keyword-rich retrieval query before hitting the
+            # vector store.
+            rewrite_prompt = (
+                "Rewrite the following question into a concise, keyword-rich "
+                "search query for a medical document retrieval system. "
+                "Remove conversational language. Return only the rewritten "
+                "query, nothing else.\n\nQuestion: " + query
+            )
+            rewritten_query = llm.invoke(rewrite_prompt).content.strip()
+            logger.info("Rewritten query: %s", rewritten_query)
+
+            docs = retriever.invoke(rewritten_query)
             if not docs:
                 logger.info("No documents matched the query")
                 return "No relevant information found in the knowledge base."
