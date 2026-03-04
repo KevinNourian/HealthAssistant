@@ -22,5 +22,9 @@
   "rate_limit": {
     "max_requests": 20,
     "window_seconds": 3600
+  },
+  "limits": {
+    "summary_max_chars": 3000,
+    "lab_report_max_chars": 4000
   }
 }

@@ -1,37 +1,85 @@
-# Health Assistant - RAG Application
+<p align="center">
+  <img src="assets/banner.svg" alt="Health Assistant Banner" width="100%" />
+</p>
 
-A simple, modular RAG (Retrieval-Augmented Generation) application for querying PDF documents with automatic web fallback.
+<p align="center">
+  <strong>A multi-user, RAG-powered health assistant with safety guardrails, built on Streamlit.</strong>
+</p>
 
-## 🎯 Features
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit" />
+  <img src="https://img.shields.io/badge/LangChain-0.1+-1C3C3C?logo=langchain&logoColor=white" alt="LangChain" />
+  <img src="https://img.shields.io/badge/ChromaDB-0.4+-00A67E" alt="ChromaDB" />
+  <img src="https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white" alt="OpenAI" />
+</p>
 
-- **Function-based architecture** - Simple, easy to understand and modify
-- **Chroma vector store** - Persistent, local, and efficient
-- **One-time embedding** - PDFs are processed once and saved to disk
-- **Multi-PDF support** - Query across multiple documents
-- **Web fallback** - Automatically searches the web if answer isn't in PDFs
-- **Clean configuration** - JSON-based config for easy customization
+---
 
-## 📁 Project Structure
+## Overview
+
+Health Assistant is a Retrieval-Augmented Generation (RAG) application that answers health-related questions by combining a personal PDF knowledge base with web search. It features multi-user authentication, crisis detection guardrails, rate limiting, a health journal, and document management &mdash; all through a clean Streamlit web interface.
+
+## Features
+
+- **RAG-Powered Q&A** &mdash; Queries a vector store of health PDFs using hybrid retrieval (BM25 + semantic search with Reciprocal Rank Fusion), with automatic web fallback via SerpAPI
+- **Multi-User Authentication** &mdash; Cookie-based session management with per-user data isolation for reminders, journals, and chat history
+- **Safety Guardrails** &mdash; Crisis detection (regex patterns for medical/mental health emergencies) and LLM-based health topic validation to keep conversations on-topic
+- **Rate Limiting** &mdash; Per-user sliding-window rate limiter (configurable, default 20 requests/hour)
+- **Document Management** &mdash; Upload and remove PDFs through the UI with automatic vector store sync
+- **Health Journal** &mdash; Track health entries with optional file attachments (PDFs, images)
+- **Reminders** &mdash; Date-based health reminders displayed in the sidebar
+- **Tool-Calling Agent** &mdash; Four specialized tools: knowledge base search, web search, document summarization, and lab report analysis
+
+## Project Structure
 
 ```
-.
-├── main.py                  # Main application
-├── vector_store.py          # Vector store functions (Chroma)
-├── config.json              # Configuration file
-├── rebuild_vectorstore.py   # Utility to rebuild embeddings
-├── requirements.txt         # Dependencies
-├── .env                     # API keys (create this)
-└── data/
-    ├── COVID-19.pdf         # Your PDF files
-    └── chroma_db/           # Chroma database (auto-created)
+Health_Assistant/
+├── app.py                     # Main Streamlit application
+├── config.json                # Runtime configuration
+├── credentials.yaml           # Authentication credentials
+├── pyproject.toml             # Project metadata & dependencies
+│
+├── core/                      # Application modules
+│   ├── agent.py               # Agent loop with tool binding
+│   ├── auth.py                # Authentication setup
+│   ├── config.py              # Config loading / saving
+│   ├── guardrails.py          # Crisis detection & topic validation
+│   ├── prompts.py             # System & tool prompt templates
+│   ├── rate_limiter.py        # Per-user rate limiter
+│   ├── tools.py               # LangChain tool definitions
+│   ├── user_data.py           # User data persistence
+│   └── vector_store.py        # Chroma vector store & hybrid retriever
+│
+├── scripts/                   # Utilities
+│   ├── rebuild_vectorstore.py # Force-rebuild the vector store
+│   └── generate_credentials.py
+│
+├── data/                      # Knowledge base PDFs & vector DB
+│   ├── COVID-19.pdf
+│   ├── Diabetes.pdf
+│   ├── Hypertension.pdf
+│   ├── Heart_Disease.pdf
+│   ├── Physical_wellness.pdf
+│   ├── Cancer.pdf
+│   ├── Mental_Disorders.pdf
+│   └── chroma_db/             # Persisted Chroma database
+│
+├── user_data/                 # Per-user JSON data files
+├── journal_attachments/       # Journal file uploads (per user)
+└── assets/                    # Static assets (CSS, images)
+    ├── banner.svg
+    └── style.css
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install Dependencies
 
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
+
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. Set Up API Keys
@@ -39,243 +87,121 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
-SERPAPI_API_KEY=your_serpapi_api_key_here
+OPENAI_API_KEY=your_openai_api_key
+SERPAPI_API_KEY=your_serpapi_api_key
 ```
 
-### 3. Add Your PDFs
-
-Place your PDF files in the `data/` directory and update `config.json`:
-
-```json
-{
-  "pdf_files": [
-    "data/COVID-19.pdf",
-    "data/health-guide.pdf"
-  ]
-}
-```
-
-### 4. Run the Application
+### 3. Run the Application
 
 ```bash
-python main.py
+streamlit run app.py
 ```
 
-**First run:** Creates embeddings (may take a few minutes)  
-**Subsequent runs:** Loads from disk (instant!)
+On first launch, the vector store will be built from the PDFs in `data/` (this may take a few minutes). Subsequent launches load the persisted database instantly.
 
-## ⚙️ Configuration
+### 4. Log In
+
+Use one of the demo accounts or create your own via `scripts/generate_credentials.py`:
+
+| Username | Password |
+|----------|----------|
+| alice    | temp123  |
+| bob      | temp456  |
+
+## Configuration
 
 Edit `config.json` to customize behavior:
 
 ```json
 {
-  "pdf_files": [
-    "data/COVID-19.pdf"
-  ],
+  "pdf_files": ["data/COVID-19.pdf", "data/Diabetes.pdf", "..."],
   "chroma_directory": "data/chroma_db",
   "chunking": {
     "chunk_size": 500,
     "chunk_overlap": 50
   },
-  "retriever": {
-    "k": 3
-  },
+  "retriever": { "k": 3 },
   "llm": {
     "model": "gpt-4o-mini",
     "temperature": 0
+  },
+  "rate_limit": {
+    "max_requests": 20,
+    "window_seconds": 3600
   }
 }
 ```
 
-### Configuration Options:
+| Option | Description |
+|--------|-------------|
+| `pdf_files` | PDFs included in the knowledge base |
+| `chroma_directory` | Vector database storage path |
+| `chunk_size` | Characters per document chunk |
+| `chunk_overlap` | Overlap between chunks for context continuity |
+| `retriever.k` | Number of chunks retrieved per query |
+| `llm.model` | OpenAI model (e.g. `gpt-4o-mini`, `gpt-4`) |
+| `llm.temperature` | 0 = deterministic, 1 = creative |
+| `rate_limit.max_requests` | Max requests per user per window |
+| `rate_limit.window_seconds` | Sliding window duration in seconds |
 
-- **`pdf_files`**: List of PDF paths to include in knowledge base
-- **`chroma_directory`**: Where to save the vector database
-- **`chunk_size`**: Maximum characters per chunk (smaller = more precise, larger = more context)
-- **`chunk_overlap`**: Characters to overlap between chunks (helps maintain context)
-- **`retriever.k`**: Number of relevant chunks to retrieve per query
-- **`llm.model`**: OpenAI model to use (e.g., "gpt-4o-mini", "gpt-4")
-- **`llm.temperature`**: 0 = deterministic, 1 = creative
-
-## 📝 Usage Examples
-
-### Basic Q&A
-
-```
-Your question: What are the symptoms of COVID-19?
-
-🔍 Searching knowledge base...
-
-============================================================
-Source: PDF Knowledge Base
-============================================================
-
-The main symptoms include fever, dry cough, fatigue, and 
-shortness of breath...
-
-------------------------------------------------------------
-```
-
-### Web Fallback
+## Architecture
 
 ```
-Your question: What is the latest COVID variant in 2024?
-
-🔍 Searching knowledge base...
-📡 No answer in PDFs, searching the web...
-
-============================================================
-Source: Web Search
-============================================================
-
-CDC Reports New COVID Variant JN.1
-The latest variant shows increased transmissibility...
-
-------------------------------------------------------------
+User Question
+     │
+     ▼
+┌─────────────┐
+│  Guardrails │──→ Crisis? → Emergency resources
+│  (Safety)   │──→ Off-topic? → Redirect
+└─────┬───────┘
+      │
+      ▼
+┌─────────────┐
+│ Rate Limiter│──→ Over limit? → Wait message
+└─────┬───────┘
+      │
+      ▼
+┌─────────────┐     ┌──────────────────┐
+│   Agent     │────→│  Tool: Search KB │──→ Hybrid Retriever (BM25 + Semantic)
+│  (LLM Loop) │────→│  Tool: Web Search│──→ SerpAPI
+│             │────→│  Tool: Summarize │──→ Document summary
+│             │────→│  Tool: Lab Report│──→ Educational analysis
+└─────┬───────┘     └──────────────────┘
+      │
+      ▼
+   Response with sources
 ```
 
-## 🔄 Updating Your Knowledge Base
+## Safety
 
-### Adding New PDFs
+Health Assistant includes multiple safety layers:
 
-1. Place new PDFs in `data/` directory
-2. Add paths to `config.json`:
-   ```json
-   {
-     "pdf_files": [
-       "data/COVID-19.pdf",
-       "data/new-research.pdf"
-     ]
-   }
-   ```
-3. Rebuild the vector store:
+- **Crisis Detection** &mdash; Regex patterns identify medical emergencies (chest pain, stroke symptoms) and mental health crises (suicidal ideation, self-harm), immediately providing emergency resources (911, 988 Suicide & Crisis Lifeline)
+- **Health Topic Validation** &mdash; An LLM classifier ensures queries are health-related before processing
+- **Content Boundaries** &mdash; The system prompt prohibits diagnosis, medication prescriptions, and treatment plans; all responses include a disclaimer to consult a healthcare professional
+- **Rate Limiting** &mdash; Prevents abuse with per-user request throttling
+
+## Updating the Knowledge Base
+
+### Via the UI
+
+Navigate to the **Manage Documents** tab to upload or remove PDFs. The vector store updates automatically.
+
+### Manually
+
+1. Place new PDFs in `data/`
+2. Add their paths to `config.json`
+3. Rebuild:
    ```bash
-   python rebuild_vectorstore.py
+   python scripts/rebuild_vectorstore.py
    ```
 
-### Changing Chunking Parameters
+## Built With
 
-If you modify `chunk_size` or `chunk_overlap` in `config.json`, rebuild:
+- [Streamlit](https://streamlit.io/) &mdash; Web interface
+- [LangChain](https://www.langchain.com/) &mdash; Agent framework & tool orchestration
+- [ChromaDB](https://www.trychroma.com/) &mdash; Vector storage & semantic search
+- [OpenAI](https://openai.com/) &mdash; LLM (GPT-4o-mini) & embeddings
+- [SerpAPI](https://serpapi.com/) &mdash; Web search fallback
 
-```bash
-python rebuild_vectorstore.py
-```
 
-## 🏗️ Architecture Overview
-
-### How It Works
-
-1. **Initialization** → Checks if Chroma database exists
-2. **Load or Create** → Loads existing database OR creates new from PDFs
-3. **Query** → User asks a question
-4. **Retrieve** → Finds relevant chunks from vector store
-5. **Generate** → LLM generates answer from retrieved context
-6. **Fallback** → If no answer found, searches the web
-
-### Key Functions in `vector_store.py`
-
-```python
-# Main function - handles everything
-vectorstore = get_or_create_vectorstore(
-    pdf_paths=["data/file.pdf"],
-    persist_directory="data/chroma_db",
-    force_recreate=False
-)
-
-# Individual functions if you need more control
-docs = load_pdfs(pdf_paths)
-chunks = chunk_documents(docs, chunk_size=500)
-vectorstore = create_chroma_vectorstore(chunks, persist_dir)
-retriever = get_retriever(vectorstore, k=3)
-```
-
-## 🛠️ Extending the Application
-
-### Adding More PDF Types
-
-The `PyPDFLoader` works with standard PDFs. For other formats:
-
-```python
-# In vector_store.py, modify load_pdfs():
-from langchain_community.document_loaders import (
-    PyPDFLoader,
-    UnstructuredWordDocumentLoader,
-    TextLoader
-)
-```
-
-### Using a Different LLM
-
-Edit `config.json`:
-
-```json
-{
-  "llm": {
-    "model": "gpt-4",
-    "temperature": 0.3
-  }
-}
-```
-
-### Switching to a Different Vector Store
-
-While this version uses Chroma, you can easily switch to another vector store by modifying `vector_store.py`. The function-based design makes this straightforward:
-
-1. Replace Chroma imports
-2. Update `create_*_vectorstore()` function
-3. Update `load_*_vectorstore()` function
-4. Keep the same function signatures
-
-## 🎓 Why This Architecture?
-
-### Simple & Maintainable
-- **Functions over classes** → Easier to understand and modify
-- **Clear flow** → Load → Chunk → Embed → Save → Query
-- **Minimal abstraction** → No over-engineering
-
-### Efficient
-- **One-time processing** → Embeddings cached on disk
-- **Fast startup** → Loads from Chroma in seconds
-- **Automatic persistence** → Chroma handles saving
-
-### Flexible
-- **Easy to extend** → Add new functions without breaking existing code
-- **Modular** → Replace components independently
-- **Configurable** → JSON config for non-code changes
-
-## 📚 Common Issues
-
-### "No documents loaded"
-- Check PDF paths in `config.json` are correct
-- Ensure PDF files exist in the specified locations
-
-### "Chroma database not found"
-- First run creates the database
-- Or manually run: `python rebuild_vectorstore.py`
-
-### Slow first run
-- Normal! Embedding creation takes time
-- Subsequent runs load from disk (fast)
-
-### API errors
-- Verify `.env` file exists with valid API keys
-- Check API key permissions and quotas
-
-## 📄 License
-
-MIT License - feel free to use and modify for your projects!
-
-## 🤝 Contributing
-
-This is a simple educational project. Feel free to:
-- Add more features
-- Improve error handling
-- Support more document types
-- Add better logging
-- Create a Streamlit UI
-
----
-
-**Built with:** LangChain, Chroma, OpenAI, SerpAPI

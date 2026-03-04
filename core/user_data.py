@@ -3,7 +3,7 @@ User data management and session state initialization.
 
 Each user's reminders and journal entries are persisted as a JSON file
 named ``user_data_<username>.json``.  Session state is re-initialized
-whenever the active user changes (e.g. after a new login).
+whenever the active user changes after a new login.
 """
 
 import json

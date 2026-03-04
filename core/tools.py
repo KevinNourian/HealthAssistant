@@ -18,7 +18,6 @@ from langchain_core.tools import tool, BaseTool
 from langchain_openai import ChatOpenAI
 from serpapi import GoogleSearch
 
-from core.config import SUMMARY_MAX_CHARS, LAB_REPORT_MAX_CHARS
 from core.prompts import SUMMARY_PROMPT, LAB_ANALYSIS_PROMPT
 from core.vector_store import normalize_source_path
 
@@ -51,6 +50,7 @@ def create_tools(
         """Search the health knowledge base for information from uploaded
         medical documents. Use this tool when the user asks a health question
         that might be answered by their personal document library."""
+        
         logger.info("search_knowledge_base called with query: %s", query)
         try:
             # Query rewriting: rephrase the conversational query into a
@@ -151,7 +151,7 @@ def create_tools(
 
             combined_text = "\n\n".join(doc.page_content for doc in docs)
             prompt = SUMMARY_PROMPT.format(
-                content=combined_text[:SUMMARY_MAX_CHARS]
+                content=combined_text[:config["limits"]["summary_max_chars"]]
             )
             logger.info(
                 "Summarizing %d chunks (%d chars)",
@@ -180,7 +180,7 @@ def create_tools(
 
         try:
             prompt = LAB_ANALYSIS_PROMPT.format(
-                report_text=report_text[:LAB_REPORT_MAX_CHARS]
+                report_text=report_text[:config["limits"]["lab_report_max_chars"]]
             )
             response = llm.invoke(prompt)
             return response.content

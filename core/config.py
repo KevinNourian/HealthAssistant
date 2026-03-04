@@ -14,16 +14,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONSTANTS
-# ═══════════════════════════════════════════════════════════════════════════════
-SUMMARY_MAX_CHARS: int = 3000
-"""Maximum characters of document text sent to the summary prompt."""
-
-LAB_REPORT_MAX_CHARS: int = 4000
-"""Maximum characters of lab report text sent to the analysis prompt."""
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG FILE OPERATIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 def load_config(config_path: str = "config.json") -> dict[str, Any]:
@@ -57,7 +47,7 @@ def validate_api_keys() -> None:
     """Validate that required API keys are present in the environment.
 
     Reads ``OPENAI_API_KEY`` and ``SERPAPI_API_KEY`` from environment
-    variables (typically loaded from ``.env`` via ``python-dotenv``).
+    variables.
 
     Raises:
         EnvironmentError: If ``OPENAI_API_KEY`` is missing or does not

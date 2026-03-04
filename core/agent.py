@@ -24,7 +24,7 @@ from core.prompts import SYSTEM_PROMPT
 logger = logging.getLogger(__name__)
 
 MAX_AGENT_ITERATIONS: int = 5
-"""Maximum number of LLM ↔ tool round-trips before the loop stops."""
+"""Maximum number of LLM tool round-trips before the loop stops."""
 
 
 def bind_tools(
@@ -32,10 +32,6 @@ def bind_tools(
     tools: list[BaseTool],
 ) -> tuple[Any, dict[str, BaseTool]]:
     """Bind tools to the LLM and return the bound model plus a lookup map.
-
-    Args:
-        llm: The base ``ChatOpenAI`` instance.
-        tools: List of LangChain tool objects to make available.
 
     Returns:
         A tuple of ``(llm_with_tools, tools_by_name)`` where
@@ -90,7 +86,7 @@ def run_agent(
         )
         messages.append(response)
 
-        # No tool calls → the LLM produced a final answer
+        # No tool calls the LLM produced a final answer
         if not response.tool_calls:
             logger.info("Agent produced final answer on iteration %d", iteration)
             return response.content
