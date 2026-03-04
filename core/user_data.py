@@ -15,7 +15,11 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-_USER_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "user_data")
+_USER_DATA_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "user_data",
+)
 
 
 def _user_data_path(username: str) -> str:
@@ -45,12 +49,15 @@ def load_user_data(username: str) -> dict[str, Any]:
     """
     filepath = _user_data_path(username)
     if not os.path.exists(filepath):
-        logger.info("No data file for user '%s'; returning defaults", username)
+        logger.info(
+            "No data file for user '%s'; returning defaults",
+            username,
+        )
         return {"reminders": [], "journal_entries": []}
 
     try:
-        with open(filepath, "r") as f:
-            data = json.load(f)
+        with open(filepath, "r") as data_file:
+            data = json.load(data_file)
         logger.info("Loaded data for user '%s'", username)
         return data
     except (json.JSONDecodeError, OSError) as e:
@@ -73,8 +80,8 @@ def save_user_data(username: str) -> None:
         "journal_entries": st.session_state.journal_entries,
     }
     try:
-        with open(filepath, "w") as f:
-            json.dump(data, f, indent=2)
+        with open(filepath, "w") as data_file:
+            json.dump(data, data_file, indent=2)
         logger.info("Saved data for user '%s'", username)
     except OSError as e:
         logger.error("Failed to save data for user '%s': %s", username, e)

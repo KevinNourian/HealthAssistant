@@ -31,8 +31,8 @@ def load_config(config_path: str = "config.json") -> dict[str, Any]:
     """
     logger.info("Loading configuration from %s", config_path)
     try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
+        with open(config_path, 'r') as config_file:
+            config = json.load(config_file)
         logger.info("Configuration loaded successfully")
         return config
     except FileNotFoundError:
@@ -90,8 +90,8 @@ def save_config(
     """
     logger.info("Saving configuration to %s", config_path)
     try:
-        with open(config_path, 'w') as f:
-            json.dump(config_data, f, indent=2)
+        with open(config_path, 'w') as config_file:
+            json.dump(config_data, config_file, indent=2)
         logger.info("Configuration saved successfully")
     except OSError as e:
         logger.error("Failed to save configuration: %s", e)

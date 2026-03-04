@@ -47,9 +47,10 @@ def create_tools(
 
     @tool
     def search_knowledge_base(query: str) -> str:
-        """Search the health knowledge base for information from uploaded
-        medical documents. Use this tool when the user asks a health question
-        that might be answered by their personal document library."""
+        """Search the health knowledge base for information
+        from uploaded medical documents. Use this tool when
+        the user asks a health question that might be
+        answered by their personal document library."""
         
         logger.info("search_knowledge_base called with query: %s", query)
         try:
@@ -108,10 +109,11 @@ def create_tools(
 
     @tool
     def summarize_document(filename: str) -> str:
-        """Summarize a specific PDF document from the knowledge base. The user
-        may refer to the document by its filename (e.g. 'nutrition_guide.pdf').
-        Use this tool when the user asks for a summary or overview of a
-        document."""
+        """Summarize a specific PDF document from the
+        knowledge base. The user may refer to the document
+        by its filename (e.g. 'nutrition_guide.pdf'). Use
+        this tool when the user asks for a summary or
+        overview of a document."""
         logger.info("summarize_document called for: %s", filename)
 
         # Find matching PDF path from config
@@ -180,7 +182,9 @@ def create_tools(
 
         try:
             prompt = LAB_ANALYSIS_PROMPT.format(
-                report_text=report_text[:config["limits"]["lab_report_max_chars"]]
+                report_text=report_text[
+                    :config["limits"]["lab_report_max_chars"]
+                ]
             )
             response = llm.invoke(prompt)
             return response.content

@@ -79,23 +79,35 @@ def run_agent(
     response: AIMessage | None = None
 
     for iteration in range(1, MAX_AGENT_ITERATIONS + 1):
-        logger.info("Agent iteration %d/%d", iteration, MAX_AGENT_ITERATIONS)
+        logger.info(
+            "Agent iteration %d/%d",
+            iteration,
+            MAX_AGENT_ITERATIONS,
+        )
 
         response = llm_with_tools.invoke(
-            [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+            [{"role": "system", "content": SYSTEM_PROMPT}]
+            + messages
         )
         messages.append(response)
 
-        # No tool calls the LLM produced a final answer
+        # No tool calls — the LLM produced a final answer
         if not response.tool_calls:
-            logger.info("Agent produced final answer on iteration %d", iteration)
+            logger.info(
+                "Agent produced final answer on iteration %d",
+                iteration,
+            )
             return response.content
 
         # Execute each tool call and feed results back
         for tool_call in response.tool_calls:
             tool_name: str = tool_call["name"]
             tool_args: dict[str, Any] = tool_call["args"]
-            logger.info("Calling tool '%s' with args: %s", tool_name, tool_args)
+            logger.info(
+                "Calling tool '%s' with args: %s",
+                tool_name,
+                tool_args,
+            )
 
             if tool_name not in tools_by_name:
                 error_msg = f"Unknown tool requested: {tool_name}"

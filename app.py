@@ -584,7 +584,10 @@ with tab2:
         "Upload PDF",
         type=["pdf"],
         key="kb_pdf_upload",
-        help="Upload health-related PDF documents to add to your knowledge base",
+        help=(
+            "Upload health-related PDF documents to add "
+            "to your knowledge base"
+        ),
     )
 
     if uploaded_pdf:

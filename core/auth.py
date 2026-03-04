@@ -15,7 +15,11 @@ from yaml.loader import SafeLoader
 
 logger = logging.getLogger(__name__)
 
-_CREDS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "credentials.yaml")
+_CREDS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "credentials.yaml",
+)
 
 
 def load_authenticator() -> stauth.Authenticate:
