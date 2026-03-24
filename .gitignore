@@ -6,6 +6,17 @@ dist/
 wheels/
 *.egg-info
 .env
+CLAUDE.md
+credentials.yaml
 
 # Virtual environments
 .venv
+
+# Folders
+journal_attachments/
+lab_reports_samples/
+user_data/
+data/
+archive/
+kevinnouri-AE.2.5/
+
