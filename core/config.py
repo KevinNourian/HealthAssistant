@@ -14,6 +14,14 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODEL PRICING (USD per 1M tokens)
+# ═══════════════════════════════════════════════════════════════════════════════
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4o":      {"input": 2.50, "output": 10.00},
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG FILE OPERATIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 def load_config(config_path: str = "config.json") -> dict[str, Any]:

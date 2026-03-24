@@ -30,6 +30,7 @@ def create_tools(
     llm: ChatOpenAI,
     config: dict[str, Any],
     serpapi_key: str,
+    bp_readings_ref: list[dict[str, Any]] | None = None,
 ) -> list[BaseTool]:
     """Create and return all agent tools with injected dependencies.
 
@@ -39,6 +40,9 @@ def create_tools(
         llm: The ChatOpenAI LLM instance.
         config: Application configuration dictionary.
         serpapi_key: API key for SerpAPI web search.
+        bp_readings_ref: Reference to the user's blood pressure
+            readings list.  Because Python lists are mutable, this
+            always reflects the latest data.
 
     Returns:
         A list of LangChain ``BaseTool`` objects ready to be bound to
@@ -192,9 +196,45 @@ def create_tools(
             logger.error("Lab report analysis failed: %s", e)
             return f"Error analyzing lab report: {e}"
 
+    @tool
+    def get_blood_pressure_data(query: str) -> str:
+        """Retrieve the user's blood pressure readings. Use this tool when
+        the user asks about their blood pressure history, trends, or
+        averages. Readings include systolic, diastolic, and pulse data.
+        The query parameter can describe the time period of interest
+        (e.g. 'last month', 'all readings')."""
+        logger.info("get_blood_pressure_data called with query: %s", query)
+        if bp_readings_ref is None:
+            return "Blood pressure tracking is not available."
+        try:
+            if not bp_readings_ref:
+                return "No blood pressure readings recorded yet."
+            lines: list[str] = []
+            for r in bp_readings_ref:
+                pulse_str = (
+                    f", pulse {r['pulse']} BPM"
+                    if r.get("pulse") else ""
+                )
+                lines.append(
+                    f"{r['date']} {r.get('time', '')} — "
+                    f"{r['systolic']}/{r['diastolic']} mmHg"
+                    f"{pulse_str}"
+                )
+            logger.info(
+                "Returning %d blood pressure readings", len(bp_readings_ref)
+            )
+            return (
+                f"Blood pressure readings ({len(bp_readings_ref)} total):\n"
+                + "\n".join(lines)
+            )
+        except Exception as e:
+            logger.error("Blood pressure data retrieval failed: %s", e)
+            return f"Error retrieving blood pressure data: {e}"
+
     return [
         search_knowledge_base,
         search_web,
         summarize_document,
         analyze_lab_report,
+        get_blood_pressure_data,
     ]

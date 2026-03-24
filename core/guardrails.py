@@ -139,13 +139,20 @@ _SCOPE_CLASSIFICATION_PROMPT: str = (
     "Health-related topics include: medical conditions, symptoms, medications, "
     "lab results, nutrition, fitness, mental wellness, diseases, anatomy, "
     "medical procedures, healthcare providers, or personal health journaling.\n\n"
-    "Reply with exactly one word — YES or NO — and nothing else.\n\n"
+    "If the query is a follow-up (e.g. 'explain that', 'tell me more'), "
+    "use the recent conversation context to determine the topic.\n\n"
+    "If there is recent conversation context about a health topic, also "
+    "allow meta-conversational queries about the conversation itself "
+    "(e.g. 'what did I ask you?', 'summarize our discussion'). Answer YES "
+    "for these when the conversation is health-related.\n\n"
+    "{context_block}"
     "User query: {query}\n\n"
+    "Reply with exactly one word — YES or NO — and nothing else.\n\n"
     "Answer:"
 )
 
 
-def is_health_related(text: str, llm: Any) -> bool:
+def is_health_related(text: str, llm: Any, recent_context: str = "") -> bool:
     """Classify whether *text* is a health-related query.
 
     Makes a single, minimal LLM call.  Defaults to ``True`` on any error
@@ -154,12 +161,22 @@ def is_health_related(text: str, llm: Any) -> bool:
     Args:
         text: The user's input (capped at 500 chars for the classifier).
         llm: A ``ChatOpenAI`` (or compatible) instance.
+        recent_context: Optional recent conversation history to help
+            classify follow-up queries like "explain that".
 
     Returns:
         ``True`` if the query is health-related, ``False`` otherwise.
     """
     try:
-        prompt = _SCOPE_CLASSIFICATION_PROMPT.format(query=text[:500])
+        context_block = ""
+        if recent_context:
+            context_block = (
+                f"Recent conversation context:\n{recent_context}\n\n"
+            )
+        prompt = _SCOPE_CLASSIFICATION_PROMPT.format(
+            context_block=context_block,
+            query=text[:500],
+        )
         response = llm.invoke(prompt)
         answer = response.content.strip().upper()
         logger.info("Health topic scope classification: '%s'", answer)

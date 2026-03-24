@@ -17,6 +17,7 @@ the Streamlit UI.  Business logic lives in the other modules:
 
 import logging
 import os
+import sqlite3
 from io import BytesIO
 from datetime import datetime
 from typing import Any
@@ -25,14 +26,16 @@ import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langgraph.errors import GraphRecursionError
+from langgraph.checkpoint.sqlite import SqliteSaver
 
-from core.config import load_config, save_config, validate_api_keys
+from core.config import load_config, save_config, validate_api_keys, MODEL_PRICING
 from core.rate_limiter import check_and_record, RateLimitExceeded
 from core.auth import load_authenticator, render_login
 from core.user_data import init_session_state, save_user_data
 from core.tools import create_tools
-from core.agent import bind_tools, run_agent
+from core.agent import build_graph
 from core.guardrails import check_for_crisis, is_health_related, CrisisType
 from core.vector_store import (
     get_or_create_vectorstore,
@@ -119,6 +122,11 @@ logger.info("Authenticated session for user '%s'", username)
 
 init_session_state(username)
 
+# Thread counter for checkpointed conversations.  Incrementing this
+# starts a fresh conversation thread while preserving old checkpoints.
+if "chat_thread_counter" not in st.session_state:
+    st.session_state.chat_thread_counter = 0
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INITIALIZE RESOURCES (CACHED)
@@ -167,16 +175,40 @@ def initialize_llm() -> ChatOpenAI:
     )
 
 
+@st.cache_resource
+def initialize_checkpointer() -> SqliteSaver:
+    """Initialize the SQLite checkpointer for persistent memory.
+
+    Uses ``check_same_thread=False`` because Streamlit runs callbacks
+    on different threads.
+
+    Returns:
+        A configured ``SqliteSaver`` instance.
+    """
+    logger.info("Initializing SQLite checkpointer")
+    conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    return checkpointer
+
+
 with st.spinner("Loading..."):
     vectorstore, retriever = initialize_vectorstore()
     llm = initialize_llm()
+    checkpointer = initialize_checkpointer()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # AGENT SETUP
 # ═══════════════════════════════════════════════════════════════════════════════
-tools = create_tools(vectorstore, retriever, llm, config, SERPAPI_API_KEY)
-llm_with_tools, tools_by_name = bind_tools(llm, tools)
+tools = create_tools(
+    vectorstore,
+    retriever,
+    llm,
+    config,
+    SERPAPI_API_KEY,
+    bp_readings_ref=st.session_state.bp_readings,
+)
+graph = build_graph(llm, tools, checkpointer=checkpointer)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -288,6 +320,31 @@ with st.sidebar:
         render_config_item("Top-K", config["retriever"]["k"])
 
     st.markdown("---")
+
+    # ── Token Usage ──────────────────────────────────────────────────────
+    st.markdown("### 📊 Token Usage")
+
+    total_input: int = sum(
+        qa.get("input_tokens", 0)
+        for qa in st.session_state.get("conversation_history", [])
+    )
+    total_output: int = sum(
+        qa.get("output_tokens", 0)
+        for qa in st.session_state.get("conversation_history", [])
+    )
+
+    model_name: str = config["llm"]["model"]
+    pricing = MODEL_PRICING.get(model_name, MODEL_PRICING["gpt-4o-mini"])
+    total_cost: float = (
+        (total_input / 1_000_000) * pricing["input"]
+        + (total_output / 1_000_000) * pricing["output"]
+    )
+
+    render_config_item("Input", f"{total_input:,}")
+    render_config_item("Output", f"{total_output:,}")
+    render_config_item("Cost", f"${total_cost:.6f}")
+
+    st.markdown("---")
     st.caption("Powered by OpenAI & LangChain")
 
 
@@ -296,7 +353,9 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════════════
 st.title("Health Assistant")
 
-tab1, tab2, tab3 = st.tabs(["Chat", "Manage Documents", "Journal"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Chat", "Manage Documents", "Blood Pressure", "Journal",
+])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -337,6 +396,12 @@ with tab1:
             if qa.get("tools_used"):
                 st.caption(f"🔧 Tools used: {', '.join(qa['tools_used'])}")
 
+            if qa.get("input_tokens") or qa.get("output_tokens"):
+                st.caption(
+                    f"📊 Tokens: {qa.get('input_tokens', 0):,} in "
+                    f"/ {qa.get('output_tokens', 0):,} out"
+                )
+
             if qa.get("sources"):
                 for i, source in enumerate(qa["sources"], 1):
                     if source == "Knowledge Base":
@@ -374,7 +439,7 @@ with tab1:
             "Clear Chat", key="clear_btn", use_container_width=True,
         ):
             st.session_state.conversation_history = []
-            st.session_state.agent_messages = []
+            st.session_state.chat_thread_counter += 1
             logger.info("Chat history cleared by user")
             st.rerun()
 
@@ -410,8 +475,28 @@ with tab1:
 
                         # ── Guardrail 2: Health topic scope (LLM check) ───
                         # Skip when a lab PDF is attached — context is clear.
+                        # Pull recent context from the checkpoint so the
+                        # classifier can handle follow-up queries.
+                        recent_context = ""
+                        if not uploaded_lab:
+                            thread_id = (
+                                f"{username}_{st.session_state.chat_thread_counter}"
+                            )
+                            state_snapshot = graph.get_state(
+                                {"configurable": {"thread_id": thread_id}}
+                            )
+                            prev_msgs = state_snapshot.values.get(
+                                "messages", []
+                            )
+                            # Use the last 4 messages (2 exchanges) max.
+                            for msg in prev_msgs[-4:]:
+                                role = msg.type  # "human" or "ai"
+                                recent_context += (
+                                    f"{role}: {msg.content[:200]}\n"
+                                )
+
                         if not uploaded_lab and not is_health_related(
-                            question, llm
+                            question, llm, recent_context=recent_context
                         ):
                             out_of_scope = True
                             logger.info(
@@ -450,23 +535,52 @@ with tab1:
                                     )
 
                             if not ask_error:
+                                thread_id = (
+                                    f"{username}_{st.session_state.chat_thread_counter}"
+                                )
+                                invoke_config = {
+                                    "configurable": {"thread_id": thread_id},
+                                    "recursion_limit": 10,
+                                }
+
+                                # Snapshot state before invoke so we can
+                                # identify new messages and token deltas.
+                                state_before = graph.get_state(invoke_config)
+                                prev_values = state_before.values or {}
                                 msgs_before: int = len(
-                                    st.session_state.agent_messages
+                                    prev_values.get("messages", [])
+                                )
+                                tokens_in_before: int = prev_values.get(
+                                    "input_tokens", 0
+                                )
+                                tokens_out_before: int = prev_values.get(
+                                    "output_tokens", 0
                                 )
 
-                                answer_text: str = run_agent(
-                                    user_message,
-                                    st.session_state.agent_messages,
-                                    llm_with_tools,
-                                    tools_by_name,
+                                result = graph.invoke(
+                                    {"messages": [HumanMessage(content=user_message)]},
+                                    invoke_config,
+                                )
+                                answer_text: str = (
+                                    result["messages"][-1].content
+                                )
+
+                                # Per-turn token counts (delta).
+                                turn_input_tokens: int = (
+                                    result.get("input_tokens", 0)
+                                    - tokens_in_before
+                                )
+                                turn_output_tokens: int = (
+                                    result.get("output_tokens", 0)
+                                    - tokens_out_before
                                 )
 
                                 # Identify tools and extract sources
+                                # from only the new messages this turn.
+                                new_messages = result["messages"][msgs_before:]
                                 tools_used: list[str] = []
                                 sources: list[str] = []
-                                for msg in st.session_state.agent_messages[
-                                    msgs_before:
-                                ]:
+                                for msg in new_messages:
                                     if (
                                         isinstance(msg, AIMessage)
                                         and msg.tool_calls
@@ -499,6 +613,8 @@ with tab1:
                                     "answer": answer_text,
                                     "tools_used": tools_used,
                                     "sources": sources,
+                                    "input_tokens": turn_input_tokens,
+                                    "output_tokens": turn_output_tokens,
                                 })
 
                                 st.session_state.question_counter += 1
@@ -507,6 +623,12 @@ with tab1:
                         st.warning(str(e))
                         logger.warning(
                             "Rate limit hit for user '%s'", username
+                        )
+                    except GraphRecursionError:
+                        logger.warning("Agent hit recursion limit")
+                        ask_error = (
+                            "I wasn't able to complete the request. "
+                            "Please try again."
                         )
                     except Exception as e:
                         logger.error("Error during agent invocation: %s", e)
@@ -635,9 +757,157 @@ with tab2:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 3: HEALTH JOURNAL
+# TAB 3: BLOOD PRESSURE TRACKER
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
+    st.markdown("### Blood Pressure Tracker")
+    st.caption("Record and monitor your blood pressure over time")
+
+    # ── Entry Form ───────────────────────────────────────────────────────
+    with st.form("bp_form", clear_on_submit=True):
+        bp_cols = st.columns([1, 1, 1, 1, 1])
+
+        with bp_cols[0]:
+            bp_date = st.date_input("Date", key="bp_date")
+        with bp_cols[1]:
+            bp_time = st.time_input("Time", key="bp_time")
+        with bp_cols[2]:
+            bp_systolic = st.number_input(
+                "Systolic", min_value=60, max_value=250, value=120,
+                key="bp_systolic",
+            )
+        with bp_cols[3]:
+            bp_diastolic = st.number_input(
+                "Diastolic", min_value=30, max_value=150, value=80,
+                key="bp_diastolic",
+            )
+        with bp_cols[4]:
+            bp_pulse = st.number_input(
+                "Pulse", min_value=30, max_value=220, value=72,
+                key="bp_pulse",
+            )
+
+        if st.form_submit_button(
+            "Save Reading", use_container_width=True,
+        ):
+            reading: dict[str, Any] = {
+                "date": bp_date.strftime("%Y-%m-%d"),
+                "time": bp_time.strftime("%H:%M"),
+                "systolic": bp_systolic,
+                "diastolic": bp_diastolic,
+                "pulse": bp_pulse,
+            }
+            st.session_state.bp_readings.append(reading)
+            save_user_data(username)
+            logger.info("Blood pressure reading saved: %s", reading)
+            st.rerun()
+
+    # ── Chart ────────────────────────────────────────────────────────────
+    if st.session_state.bp_readings:
+        st.markdown("---")
+        st.markdown("#### Trends")
+
+        import pandas as pd
+        import plotly.graph_objects as go
+
+        df = pd.DataFrame(st.session_state.bp_readings)
+        df["datetime"] = pd.to_datetime(df["date"] + " " + df["time"])
+        df = df.sort_values("datetime")
+        df["label"] = df["datetime"].dt.strftime("%b %d, %Y")
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name="Systolic",
+            x=df["label"],
+            y=df["systolic"],
+            marker_color="#EF4444",
+        ))
+        fig.add_trace(go.Bar(
+            name="Diastolic",
+            x=df["label"],
+            y=df["diastolic"],
+            marker_color="#3B82F6",
+        ))
+        fig.add_trace(go.Bar(
+            name="Pulse",
+            x=df["label"],
+            y=df.get("pulse", pd.Series([0] * len(df))),
+            marker_color="#10B981",
+        ))
+        fig.update_layout(
+            barmode="group",
+            xaxis_title="Date",
+            yaxis_title="mmHg / BPM",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            margin=dict(l=40, r=20, t=40, b=40),
+            height=350,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ── Readings ──────────────────────────────────────────────────────
+        st.markdown("#### Readings")
+
+        for idx, reading in enumerate(
+            reversed(st.session_state.bp_readings)
+        ):
+            real_idx: int = (
+                len(st.session_state.bp_readings) - 1 - idx
+            )
+
+            with st.container(border=True):
+                col_date, col_sys, col_dia, col_pulse, col_del = st.columns(
+                    [2, 1.5, 1.5, 1.5, 1]
+                )
+
+                with col_date:
+                    parsed_date = datetime.strptime(
+                        reading["date"], "%Y-%m-%d"
+                    )
+                    display_date = (
+                        f"{parsed_date.strftime('%B')} "
+                        f"{parsed_date.day}, "
+                        f"{parsed_date.year}"
+                    )
+                    st.markdown(
+                        f"**{display_date}**  \n"
+                        f"{reading.get('time', '')}"
+                    )
+                with col_sys:
+                    st.metric(
+                        label="Systolic",
+                        value=f"{reading['systolic']}",
+                    )
+                with col_dia:
+                    st.metric(
+                        label="Diastolic",
+                        value=f"{reading['diastolic']}",
+                    )
+                with col_pulse:
+                    st.metric(
+                        label="Pulse",
+                        value=f"{reading.get('pulse', '—')}",
+                    )
+                with col_del:
+                    st.markdown("")
+                    if st.button(
+                        "Delete",
+                        key=f"del_bp_{real_idx}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.bp_readings.pop(real_idx)
+                        save_user_data(username)
+                        logger.info("Blood pressure reading deleted")
+                        st.rerun()
+    else:
+        st.info(
+            "No readings yet. Start tracking your blood pressure!"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 4: HEALTH JOURNAL
+# ─────────────────────────────────────────────────────────────────────────────
+with tab4:
     st.markdown("### Health Journal")
     st.caption("Track your health journey with notes and attachments")
 
@@ -781,8 +1051,16 @@ with tab3:
                             st.session_state.editing_entry = None
                             st.rerun()
                 else:
+                    parsed_journal_date = datetime.strptime(
+                        entry["date"], "%Y-%m-%d"
+                    )
+                    journal_display_date = (
+                        f"{parsed_journal_date.strftime('%B')} "
+                        f"{parsed_journal_date.day}, "
+                        f"{parsed_journal_date.year}"
+                    )
                     st.markdown(
-                        f"**{entry['date']} — "
+                        f"**{journal_display_date} — "
                         f"{entry.get('title', 'Untitled')}"
                         f"{attachment_icon}**"
                     )

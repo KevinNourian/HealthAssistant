@@ -1,135 +1,179 @@
 """
 Agent orchestration for the Health Assistant.
 
-Binds tools to the LLM and implements the agent loop that lets the model
-decide which tools to call and when to produce a final answer.  The loop
-includes a configurable iteration limit to prevent runaway tool-call
-chains.
+Uses a LangGraph StateGraph to implement the ReAct loop with agentic RAG:
+agent_node (LLM) → should_continue? → tool_node → grade_retrieval → agent_node
+
+The ``grade_retrieval`` node evaluates knowledge-base results and guides
+the agent to try alternative strategies when retrieval is not relevant.
 """
 
 import logging
-from typing import Any
+import operator
+from typing import Annotated, Any
 
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
-    HumanMessage,
+    SystemMessage,
     ToolMessage,
 )
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
+from typing_extensions import TypedDict
 
-from core.prompts import SYSTEM_PROMPT
+from core.prompts import SYSTEM_PROMPT, RETRIEVAL_GRADING_PROMPT
 
 logger = logging.getLogger(__name__)
 
-MAX_AGENT_ITERATIONS: int = 5
-"""Maximum number of LLM tool round-trips before the loop stops."""
+
+# ── State Schema ─────────────────────────────────────────────────────────
+class AgentState(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+    input_tokens: Annotated[int, operator.add]
+    output_tokens: Annotated[int, operator.add]
 
 
-def bind_tools(
+# ── Graph Construction ───────────────────────────────────────────────────
+def build_graph(
     llm: ChatOpenAI,
     tools: list[BaseTool],
-) -> tuple[Any, dict[str, BaseTool]]:
-    """Bind tools to the LLM and return the bound model plus a lookup map.
-
-    Returns:
-        A tuple of ``(llm_with_tools, tools_by_name)`` where
-        *llm_with_tools* is the tool-augmented model and
-        *tools_by_name* maps each tool's name to its callable.
-    """
-    llm_with_tools = llm.bind_tools(tools)
-    tools_by_name: dict[str, BaseTool] = {t.name: t for t in tools}
-    logger.info(
-        "Bound %d tools to LLM: %s",
-        len(tools),
-        ", ".join(tools_by_name.keys()),
-    )
-    return llm_with_tools, tools_by_name
-
-
-def run_agent(
-    user_input: str,
-    messages: list[BaseMessage],
-    llm_with_tools: Any,
-    tools_by_name: dict[str, BaseTool],
-) -> str:
-    """Run the agent loop.
-
-    The LLM decides which tools to call and when to produce a final
-    answer.  *messages* is mutated in-place so the caller can inspect
-    tool calls and results after the function returns.
+    checkpointer: Any | None = None,
+) -> Any:
+    """Build and compile the agent graph.
 
     Args:
-        user_input: The user's message (may include attached PDF text).
-        messages: The LangChain message list (mutated in-place).
-        llm_with_tools: The LLM with tools bound via ``bind_tools``.
-        tools_by_name: A dict mapping tool names to tool callables.
+        llm: The ChatOpenAI instance.
+        tools: List of LangChain tools for the agent.
+        checkpointer: Optional LangGraph checkpointer for persistent
+            memory.  When provided, the graph saves and restores state
+            automatically using a ``thread_id`` passed at invoke time.
 
     Returns:
-        The assistant's final text answer.
-
-    Raises:
-        No exceptions are raised; errors inside individual tools are
-        caught by the tools themselves and returned as error strings.
+        A compiled LangGraph runnable.
     """
-    logger.info("Agent invoked with input (%d chars)", len(user_input))
-    messages.append(HumanMessage(content=user_input))
+    llm_with_tools = llm.bind_tools(tools)
 
-    response: AIMessage | None = None
-
-    for iteration in range(1, MAX_AGENT_ITERATIONS + 1):
-        logger.info(
-            "Agent iteration %d/%d",
-            iteration,
-            MAX_AGENT_ITERATIONS,
-        )
-
+    def agent_node(state: AgentState) -> dict:
+        """Call the LLM with the current conversation and system prompt."""
         response = llm_with_tools.invoke(
-            [{"role": "system", "content": SYSTEM_PROMPT}]
-            + messages
+            [SystemMessage(content=SYSTEM_PROMPT)]
+            + state["messages"]
         )
-        messages.append(response)
+        # Extract token usage from response metadata.
+        usage = getattr(response, "usage_metadata", None) or {}
+        return {
+            "messages": [response],
+            "input_tokens": usage.get("input_tokens", 0),
+            "output_tokens": usage.get("output_tokens", 0),
+        }
 
-        # No tool calls — the LLM produced a final answer
-        if not response.tool_calls:
-            logger.info(
-                "Agent produced final answer on iteration %d",
-                iteration,
+    def should_continue(state: AgentState) -> str:
+        """Route to tools if the LLM requested tool calls, else end."""
+        last_message = state["messages"][-1]
+        if last_message.tool_calls:
+            return "tools"
+        return "end"
+
+    def grade_retrieval(state: AgentState) -> dict:
+        """Evaluate knowledge-base results and guide the agent if needed.
+
+        Runs after the tools node.  If ``search_knowledge_base`` was
+        called, a lightweight LLM classification determines whether the
+        retrieved documents are relevant.  When they are not, a guidance
+        message is appended so the agent can try an alternative strategy
+        (e.g. web search).
+
+        If no knowledge-base search occurred, the node passes through
+        without any state change.
+        """
+        messages = state["messages"]
+
+        # Find the most recent AIMessage with tool calls.
+        last_ai: AIMessage | None = None
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                last_ai = msg
+                break
+
+        if last_ai is None:
+            return {}
+
+        # Check if search_knowledge_base was among the tool calls.
+        kb_call_id: str | None = None
+        for tc in last_ai.tool_calls:
+            if tc["name"] == "search_knowledge_base":
+                kb_call_id = tc["id"]
+                break
+
+        if kb_call_id is None:
+            return {}
+
+        # Find the corresponding ToolMessage with the retrieval results.
+        kb_result: str = ""
+        for msg in reversed(messages):
+            if (
+                isinstance(msg, ToolMessage)
+                and msg.tool_call_id == kb_call_id
+            ):
+                kb_result = msg.content
+                break
+
+        if not kb_result or "No relevant information" in kb_result:
+            return {}
+
+        # Find the user's original question (last HumanMessage).
+        user_question: str = ""
+        for msg in reversed(messages):
+            if msg.type == "human":
+                user_question = msg.content[:500]
+                break
+
+        # Grade the retrieval with a lightweight LLM call.
+        grade_prompt = RETRIEVAL_GRADING_PROMPT.format(
+            question=user_question,
+            documents=kb_result[:1000],
+        )
+        grade_response = llm.invoke(grade_prompt)
+        grade = grade_response.content.strip().upper()
+        logger.info("Retrieval grading result: '%s'", grade)
+
+        if grade.startswith("YES"):
+            return {}
+
+        # Not relevant — add guidance for the agent's next iteration.
+        logger.info("Knowledge base results graded as not relevant")
+        guidance = SystemMessage(
+            content=(
+                "The knowledge base results were not relevant to the "
+                "user's question. Consider using the search_web tool "
+                "or answering from your general knowledge instead."
             )
-            return response.content
+        )
+        return {"messages": [guidance]}
 
-        # Execute each tool call and feed results back
-        for tool_call in response.tool_calls:
-            tool_name: str = tool_call["name"]
-            tool_args: dict[str, Any] = tool_call["args"]
-            logger.info(
-                "Calling tool '%s' with args: %s",
-                tool_name,
-                tool_args,
-            )
+    tool_node = ToolNode(tools)
 
-            if tool_name not in tools_by_name:
-                error_msg = f"Unknown tool requested: {tool_name}"
-                logger.error(error_msg)
-                messages.append(
-                    ToolMessage(content=error_msg, tool_call_id=tool_call["id"])
-                )
-                continue
-
-            result: str = tools_by_name[tool_name].invoke(tool_args)
-            logger.info(
-                "Tool '%s' returned %d chars", tool_name, len(result)
-            )
-            messages.append(
-                ToolMessage(content=result, tool_call_id=tool_call["id"])
-            )
-
-    # Safety: return whatever we have if the iteration limit is reached
-    logger.warning(
-        "Agent hit max iterations (%d) without a final answer",
-        MAX_AGENT_ITERATIONS,
+    graph_builder = StateGraph(AgentState)
+    graph_builder.add_node("agent", agent_node)
+    graph_builder.add_node("tools", tool_node)
+    graph_builder.add_node("grade_retrieval", grade_retrieval)
+    graph_builder.set_entry_point("agent")
+    graph_builder.add_conditional_edges(
+        "agent",
+        should_continue,
+        {"tools": "tools", "end": END},
     )
-    if response is not None and response.content:
-        return response.content
-    return "I wasn't able to complete the request. Please try again."
+    graph_builder.add_edge("tools", "grade_retrieval")
+    graph_builder.add_edge("grade_retrieval", "agent")
+
+    graph = graph_builder.compile(checkpointer=checkpointer)
+    logger.info(
+        "Agent graph compiled with %d tools: %s",
+        len(tools),
+        ", ".join(t.name for t in tools),
+    )
+    return graph
