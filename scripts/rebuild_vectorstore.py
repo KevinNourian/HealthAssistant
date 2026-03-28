@@ -13,9 +13,7 @@ import sys
 from dotenv import load_dotenv
 
 # Allow running from any directory by adding project root
-_ROOT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), ".."
-)
+_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, _ROOT)
 
 from core.vector_store import get_or_create_vectorstore  # noqa: E402
@@ -30,30 +28,18 @@ def rebuild_vectorstore():
 
     # Load configuration
     config_path = os.path.join(_ROOT, "config.json")
-    with open(config_path, 'r') as config_file:
+    with open(config_path, "r") as config_file:
         config = json.load(config_file)
 
     print("\n" + "=" * 60)
     print("REBUILDING VECTOR STORE")
     print("=" * 60)
-    print(
-        f"\nChroma Directory: "
-        f"{config['chroma_directory']}"
-    )
-    print(
-        f"Chunk Size: "
-        f"{config['chunking']['chunk_size']}"
-    )
-    print(
-        f"Chunk Overlap: "
-        f"{config['chunking']['chunk_overlap']}"
-    )
-    print(
-        f"\nPDFs to process "
-        f"({len(config['pdf_files'])}):"
-    )
+    print(f"\nChroma Directory: {config['chroma_directory']}")
+    print(f"Chunk Size: {config['chunking']['chunk_size']}")
+    print(f"Chunk Overlap: {config['chunking']['chunk_overlap']}")
+    print(f"\nPDFs to process ({len(config['pdf_files'])}):")
 
-    for i, pdf in enumerate(config['pdf_files'], 1):
+    for i, pdf in enumerate(config["pdf_files"], 1):
         print(f"  {i}. {pdf}")
 
     print("\n" + "=" * 60)
@@ -73,10 +59,7 @@ def rebuild_vectorstore():
     print("REBUILD COMPLETE!")
     print("=" * 60)
     print("\nYour vector store has been rebuilt and saved.")
-    print(
-        "You can now run app.py to use the "
-        "updated knowledge base.\n"
-    )
+    print("You can now run app.py to use the updated knowledge base.\n")
 
 
 if __name__ == "__main__":

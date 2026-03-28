@@ -18,8 +18,21 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4o":      {"input": 2.50, "output": 10.00},
+    "gpt-4o": {"input": 2.50, "output": 10.00},
 }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOOL & SOURCE CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+TOOL_SEARCH_KB: str = "search_knowledge_base"
+"""Name of the knowledge-base retrieval tool."""
+
+SOURCE_URL_PREFIX: str = "URL:"
+"""Prefix used by the web search tool when embedding URLs in results."""
+
+SOURCE_KNOWLEDGE_BASE: str = "Knowledge Base"
+"""Display label for knowledge-base sources in the UI."""
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG FILE OPERATIONS
@@ -39,7 +52,7 @@ def load_config(config_path: str = "config.json") -> dict[str, Any]:
     """
     logger.info("Loading configuration from %s", config_path)
     try:
-        with open(config_path, 'r') as config_file:
+        with open(config_path, "r") as config_file:
             config = json.load(config_file)
         logger.info("Configuration loaded successfully")
         return config
@@ -64,8 +77,7 @@ def validate_api_keys() -> None:
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not openai_key:
         raise EnvironmentError(
-            "OPENAI_API_KEY is not set. "
-            "Add it to your .env file and restart the app."
+            "OPENAI_API_KEY is not set. Add it to your .env file and restart the app."
         )
     if not openai_key.startswith("sk-"):
         raise EnvironmentError(
@@ -76,8 +88,7 @@ def validate_api_keys() -> None:
     serpapi_key = os.getenv("SERPAPI_API_KEY", "").strip()
     if not serpapi_key:
         logger.warning(
-            "SERPAPI_API_KEY is not set — the web search tool will be "
-            "unavailable"
+            "SERPAPI_API_KEY is not set — the web search tool will be unavailable"
         )
     else:
         logger.info("API key validation passed")
@@ -98,7 +109,7 @@ def save_config(
     """
     logger.info("Saving configuration to %s", config_path)
     try:
-        with open(config_path, 'w') as config_file:
+        with open(config_path, "w") as config_file:
             json.dump(config_data, config_file, indent=2)
         logger.info("Configuration saved successfully")
     except OSError as e:

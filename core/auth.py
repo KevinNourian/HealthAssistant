@@ -39,8 +39,7 @@ def load_authenticator() -> stauth.Authenticate:
     except FileNotFoundError:
         logger.error("credentials.yaml not found")
         st.error(
-            "Missing `credentials.yaml`. "
-            "Please create the file with valid credentials."
+            "Missing `credentials.yaml`. Please create the file with valid credentials."
         )
         st.stop()
 
@@ -108,7 +107,5 @@ def render_login(authenticator: stauth.Authenticate) -> None:
         )
         st.stop()
 
-    logger.info(
-        "User authenticated: %s", st.session_state.get("username")
-    )
+    logger.info("User authenticated: %s", st.session_state.get("username"))
     st.rerun()

@@ -22,6 +22,7 @@ from langchain_core.documents import Document
 # Path Helpers
 # ────────────────────────────────────────────────────────────
 
+
 def normalize_source_path(path: str) -> str:
     """Normalize a file path for consistent source-metadata
     comparison.
@@ -46,16 +47,10 @@ def _get_ids_by_source(
     result = vectorstore.get(include=["metadatas"])
     source_to_ids: Dict[str, List[str]] = {}
     if result and result.get("ids") and result.get("metadatas"):
-        for doc_id, metadata in zip(
-            result["ids"], result["metadatas"]
-        ):
+        for doc_id, metadata in zip(result["ids"], result["metadatas"]):
             if metadata and "source" in metadata:
-                norm = _normalize_source_path(
-                    metadata["source"]
-                )
-                source_to_ids.setdefault(norm, []).append(
-                    doc_id
-                )
+                norm = _normalize_source_path(metadata["source"])
+                source_to_ids.setdefault(norm, []).append(doc_id)
     return source_to_ids
 
 
@@ -79,9 +74,7 @@ def load_pdfs(pdf_paths: List[str]) -> List[Document]:
             loader = PyPDFLoader(pdf_path)
             docs = loader.load()
             all_docs.extend(docs)
-            print(
-                f"Loaded {len(docs)} pages from {pdf_path}"
-            )
+            print(f"Loaded {len(docs)} pages from {pdf_path}")
         except Exception as e:
             print(f"Error loading {pdf_path}: {e}")
 
@@ -100,10 +93,7 @@ def chunk_documents(
     )
 
     chunks = splitter.split_documents(documents)
-    print(
-        f"Created {len(chunks)} chunks "
-        f"from {len(documents)} documents"
-    )
+    print(f"Created {len(chunks)} chunks from {len(documents)} documents")
 
     return chunks
 
@@ -136,10 +126,7 @@ def create_chroma_vectorstore(
         persist_directory=persist_directory,
     )
 
-    print(
-        f"Created Chroma vector store "
-        f"with {len(chunks)} chunks"
-    )
+    print(f"Created Chroma vector store with {len(chunks)} chunks")
     print(f"Saved to {persist_directory}")
 
     return vectorstore
@@ -167,10 +154,7 @@ def load_chroma_vectorstore(
         embedding_function=embeddings,
     )
 
-    print(
-        f"Loaded Chroma vector store "
-        f"from {persist_directory}"
-    )
+    print(f"Loaded Chroma vector store from {persist_directory}")
 
     return vectorstore
 
@@ -184,9 +168,7 @@ def vectorstore_exists(persist_directory: str) -> bool:
     Returns:
         True if vector store exists, False otherwise
     """
-    chroma_db = os.path.join(
-        persist_directory, "chroma.sqlite3"
-    )
+    chroma_db = os.path.join(persist_directory, "chroma.sqlite3")
     return os.path.exists(chroma_db)
 
 
@@ -221,24 +203,13 @@ def get_or_create_vectorstore(
         embeddings = OpenAIEmbeddings()
 
     # Try to load existing vector store
-    if (
-        not force_recreate
-        and vectorstore_exists(persist_directory)
-    ):
+    if not force_recreate and vectorstore_exists(persist_directory):
         print("Loading existing vector store...")
-        return load_chroma_vectorstore(
-            persist_directory, embeddings
-        )
+        return load_chroma_vectorstore(persist_directory, embeddings)
 
     # Force recreate: delete old data first
-    if (
-        force_recreate
-        and vectorstore_exists(persist_directory)
-    ):
-        print(
-            "Clearing existing vector store "
-            "for full rebuild..."
-        )
+    if force_recreate and vectorstore_exists(persist_directory):
+        print("Clearing existing vector store for full rebuild...")
         shutil.rmtree(persist_directory, ignore_errors=True)
 
     # Create new vector store
@@ -248,18 +219,13 @@ def get_or_create_vectorstore(
     docs = load_pdfs(pdf_paths)
 
     if not docs:
-        raise ValueError(
-            "No documents loaded. "
-            "Check your PDF paths in config.json"
-        )
+        raise ValueError("No documents loaded. Check your PDF paths in config.json")
 
     # Chunk documents
     chunks = chunk_documents(docs, chunk_size, chunk_overlap)
 
     # Create and save vector store
-    vectorstore = create_chroma_vectorstore(
-        chunks, persist_directory, embeddings
-    )
+    vectorstore = create_chroma_vectorstore(chunks, persist_directory, embeddings)
 
     return vectorstore
 
@@ -267,6 +233,7 @@ def get_or_create_vectorstore(
 # ────────────────────────────────────────────────────────────
 # Incremental Add / Remove / Sync
 # ────────────────────────────────────────────────────────────
+
 
 def add_pdf_to_vectorstore(
     vectorstore: Chroma,
@@ -282,13 +249,9 @@ def add_pdf_to_vectorstore(
 
     docs = load_pdfs([pdf_path])
     if docs:
-        chunks = chunk_documents(
-            docs, chunk_size, chunk_overlap
-        )
+        chunks = chunk_documents(docs, chunk_size, chunk_overlap)
         vectorstore.add_documents(chunks)
-        print(
-            f"Added {len(chunks)} chunks from {pdf_path}"
-        )
+        print(f"Added {len(chunks)} chunks from {pdf_path}")
 
 
 def remove_pdf_from_vectorstore(
@@ -302,10 +265,7 @@ def remove_pdf_from_vectorstore(
     ids_to_delete = source_to_ids.get(norm_path, [])
     if ids_to_delete:
         vectorstore.delete(ids=ids_to_delete)
-        print(
-            f"Removed {len(ids_to_delete)} chunks "
-            f"for {pdf_path}"
-        )
+        print(f"Removed {len(ids_to_delete)} chunks for {pdf_path}")
     else:
         print(f"No chunks found for {pdf_path}")
 
@@ -327,9 +287,7 @@ def sync_vectorstore(
     if embeddings is None:
         embeddings = OpenAIEmbeddings()
 
-    desired: Set[str] = {
-        _normalize_source_path(p) for p in pdf_paths
-    }
+    desired: Set[str] = {_normalize_source_path(p) for p in pdf_paths}
     source_to_ids = _get_ids_by_source(vectorstore)
     indexed: Set[str] = set(source_to_ids.keys())
 
@@ -340,26 +298,17 @@ def sync_vectorstore(
     for source in to_remove:
         ids = source_to_ids[source]
         vectorstore.delete(ids=ids)
-        print(
-            f"Sync: removed {len(ids)} chunks "
-            f"for {source}"
-        )
+        print(f"Sync: removed {len(ids)} chunks for {source}")
 
     # Embed new documents
     if to_add:
-        paths_to_load = [
-            p for p in pdf_paths
-            if _normalize_source_path(p) in to_add
-        ]
+        paths_to_load = [p for p in pdf_paths if _normalize_source_path(p) in to_add]
         docs = load_pdfs(paths_to_load)
         if docs:
-            chunks = chunk_documents(
-                docs, chunk_size, chunk_overlap
-            )
+            chunks = chunk_documents(docs, chunk_size, chunk_overlap)
             vectorstore.add_documents(chunks)
             print(
-                f"Sync: added {len(chunks)} chunks "
-                f"for {len(paths_to_load)} new PDF(s)"
+                f"Sync: added {len(chunks)} chunks for {len(paths_to_load)} new PDF(s)"
             )
 
     if not to_add and not to_remove:
@@ -376,9 +325,7 @@ def get_retriever(vectorstore: Chroma, k: int = 3):
     Returns:
         Retriever configured for similarity search
     """
-    return vectorstore.as_retriever(
-        search_kwargs={"k": k}
-    )
+    return vectorstore.as_retriever(search_kwargs={"k": k})
 
 
 class HybridRetriever(BaseRetriever):
@@ -415,29 +362,22 @@ class HybridRetriever(BaseRetriever):
 
         for rank, doc in enumerate(bm25_docs):
             key = doc.page_content
-            rrf_scores[key] = (
-                rrf_scores.get(key, 0.0)
-                + 0.5 / (rank + 60)
-            )
+            rrf_scores[key] = rrf_scores.get(key, 0.0) + 0.5 / (rank + 60)
             doc_lookup[key] = doc
 
         for rank, doc in enumerate(vector_docs):
             key = doc.page_content
-            rrf_scores[key] = (
-                rrf_scores.get(key, 0.0)
-                + 0.5 / (rank + 60)
-            )
+            rrf_scores[key] = rrf_scores.get(key, 0.0) + 0.5 / (rank + 60)
             doc_lookup[key] = doc
 
         # Sort by descending RRF score and return top-k
-        sorted_keys = sorted(
-            rrf_scores, key=rrf_scores.get, reverse=True
-        )
-        return [doc_lookup[k] for k in sorted_keys[:self.k]]
+        sorted_keys = sorted(rrf_scores, key=rrf_scores.get, reverse=True)
+        return [doc_lookup[k] for k in sorted_keys[: self.k]]
 
 
 def get_hybrid_retriever(
-    vectorstore: Chroma, k: int = 3,
+    vectorstore: Chroma,
+    k: int = 3,
 ) -> HybridRetriever:
     """Get a hybrid retriever combining BM25 (keyword) and
     vector (semantic) search.
@@ -457,14 +397,10 @@ def get_hybrid_retriever(
         search results.
     """
     # Fetch all chunks from Chroma to build the BM25 index
-    result = vectorstore.get(
-        include=["documents", "metadatas"]
-    )
+    result = vectorstore.get(include=["documents", "metadatas"])
     docs = [
         Document(page_content=text, metadata=meta)
-        for text, meta in zip(
-            result["documents"], result["metadatas"]
-        )
+        for text, meta in zip(result["documents"], result["metadatas"])
     ]
 
     # BM25: keyword/lexical retriever (in-memory)
@@ -472,9 +408,7 @@ def get_hybrid_retriever(
     bm25_retriever.k = k
 
     # Vector: semantic retriever backed by Chroma
-    vector_retriever = vectorstore.as_retriever(
-        search_kwargs={"k": k}
-    )
+    vector_retriever = vectorstore.as_retriever(search_kwargs={"k": k})
 
     return HybridRetriever(
         bm25_retriever=bm25_retriever,

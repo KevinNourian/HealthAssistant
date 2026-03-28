@@ -56,7 +56,9 @@ def check_and_record(
             wait_str = f"{seconds}s"
         logger.warning(
             "Rate limit exceeded for user '%s' (%d/%d requests in window)",
-            username, len(timestamps), max_requests,
+            username,
+            len(timestamps),
+            max_requests,
         )
         raise RateLimitExceeded(
             f"You've reached the limit of {max_requests} requests per "
@@ -68,5 +70,7 @@ def check_and_record(
     _request_log[username] = timestamps
     logger.info(
         "Request recorded for user '%s' (%d/%d in window)",
-        username, len(timestamps), max_requests,
+        username,
+        len(timestamps),
+        max_requests,
     )

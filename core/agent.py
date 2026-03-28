@@ -26,8 +26,14 @@ from langgraph.prebuilt import ToolNode
 from typing_extensions import TypedDict
 
 from core.prompts import SYSTEM_PROMPT, RETRIEVAL_GRADING_PROMPT
+from core.config import TOOL_SEARCH_KB
 
 logger = logging.getLogger(__name__)
+
+MAX_CONTEXT_MESSAGES: int = 20
+"""Maximum number of recent messages sent to the LLM.  The full history
+remains in the checkpoint; this limit prevents context-window overflow
+and keeps per-turn token costs under control."""
 
 
 # ── State Schema ─────────────────────────────────────────────────────────
@@ -59,9 +65,9 @@ def build_graph(
 
     def agent_node(state: AgentState) -> dict:
         """Call the LLM with the current conversation and system prompt."""
+        recent_messages = state["messages"][-MAX_CONTEXT_MESSAGES:]
         response = llm_with_tools.invoke(
-            [SystemMessage(content=SYSTEM_PROMPT)]
-            + state["messages"]
+            [SystemMessage(content=SYSTEM_PROMPT)] + recent_messages
         )
         # Extract token usage from response metadata.
         usage = getattr(response, "usage_metadata", None) or {}
@@ -105,7 +111,7 @@ def build_graph(
         # Check if search_knowledge_base was among the tool calls.
         kb_call_id: str | None = None
         for tc in last_ai.tool_calls:
-            if tc["name"] == "search_knowledge_base":
+            if tc["name"] == TOOL_SEARCH_KB:
                 kb_call_id = tc["id"]
                 break
 
@@ -115,10 +121,7 @@ def build_graph(
         # Find the corresponding ToolMessage with the retrieval results.
         kb_result: str = ""
         for msg in reversed(messages):
-            if (
-                isinstance(msg, ToolMessage)
-                and msg.tool_call_id == kb_call_id
-            ):
+            if isinstance(msg, ToolMessage) and msg.tool_call_id == kb_call_id:
                 kb_result = msg.content
                 break
 

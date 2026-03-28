@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # CRISIS DETECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class CrisisType(str, Enum):
     NONE = "none"
     MEDICAL_EMERGENCY = "medical_emergency"
@@ -35,6 +36,7 @@ class CrisisType(str, Enum):
 @dataclass
 class CrisisResult:
     """Result of a crisis detection scan."""
+
     detected: bool
     crisis_type: CrisisType = CrisisType.NONE
     resources: list[str] = field(default_factory=list)
@@ -74,12 +76,8 @@ _MEDICAL_EMERGENCY_PATTERNS: list[str] = [
     r"\bpoisoned?\b",
 ]
 
-_COMPILED_MENTAL = [
-    re.compile(p, re.IGNORECASE) for p in _MENTAL_HEALTH_PATTERNS
-]
-_COMPILED_MEDICAL = [
-    re.compile(p, re.IGNORECASE) for p in _MEDICAL_EMERGENCY_PATTERNS
-]
+_COMPILED_MENTAL = [re.compile(p, re.IGNORECASE) for p in _MENTAL_HEALTH_PATTERNS]
+_COMPILED_MEDICAL = [re.compile(p, re.IGNORECASE) for p in _MEDICAL_EMERGENCY_PATTERNS]
 
 MENTAL_HEALTH_RESOURCES: list[str] = [
     "📞 **988 Suicide & Crisis Lifeline:** Call or text **988** (US, available 24/7)",
@@ -139,6 +137,11 @@ _SCOPE_CLASSIFICATION_PROMPT: str = (
     "Health-related topics include: medical conditions, symptoms, medications, "
     "lab results, nutrition, fitness, mental wellness, diseases, anatomy, "
     "medical procedures, healthcare providers, or personal health journaling.\n\n"
+    "Also answer YES for requests to summarize, analyze, or interact with "
+    "documents or lab reports, as these are core features of the health "
+    "assistant (e.g. 'summarize COVID-19.pdf', 'analyze my lab report').\n\n"
+    "Also answer YES for queries about the user's blood pressure data "
+    "(e.g. 'how is my blood pressure trending?').\n\n"
     "If the query is a follow-up (e.g. 'explain that', 'tell me more'), "
     "use the recent conversation context to determine the topic.\n\n"
     "If there is recent conversation context about a health topic, also "
@@ -170,9 +173,7 @@ def is_health_related(text: str, llm: Any, recent_context: str = "") -> bool:
     try:
         context_block = ""
         if recent_context:
-            context_block = (
-                f"Recent conversation context:\n{recent_context}\n\n"
-            )
+            context_block = f"Recent conversation context:\n{recent_context}\n\n"
         prompt = _SCOPE_CLASSIFICATION_PROMPT.format(
             context_block=context_block,
             query=text[:500],
@@ -182,7 +183,5 @@ def is_health_related(text: str, llm: Any, recent_context: str = "") -> bool:
         logger.info("Health topic scope classification: '%s'", answer)
         return answer.startswith("YES")
     except Exception as exc:
-        logger.error(
-            "Topic scope check failed — defaulting to allow: %s", exc
-        )
+        logger.error("Topic scope check failed — defaulting to allow: %s", exc)
         return True  # fail open: never block a legitimate health query

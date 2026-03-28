@@ -12,56 +12,54 @@ import bcrypt
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt."""
-    return bcrypt.hashpw(
-        password.encode(), bcrypt.gensalt()
-    ).decode()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 # Define users with plain text passwords
 users = {
-    'alice': {
-        'email': 'alice@example.com',
-        'name': 'Alice',
-        'password': hash_password('temp123'),
+    "alice": {
+        "email": "alice@example.com",
+        "name": "Alice",
+        "password": hash_password("temp123"),
     },
-    'bob': {
-        'email': 'bob@example.com',
-        'name': 'Bob',
-        'password': hash_password('temp456'),
+    "bob": {
+        "email": "bob@example.com",
+        "name": "Bob",
+        "password": hash_password("temp456"),
     },
-    'charlie': {
-        'email': 'charlie@example.com',
-        'name': 'Charlie',
-        'password': hash_password('temp789'),
+    "charlie": {
+        "email": "charlie@example.com",
+        "name": "Charlie",
+        "password": hash_password("temp789"),
     },
-    'kevin': {
-        'email': 'kevin@example.com',
-        'name': 'Kevin',
-        'password': hash_password('temp123'),
+    "kevin": {
+        "email": "kevin@example.com",
+        "name": "Kevin",
+        "password": hash_password("temp123"),
     },
 }
 
 # Create credentials structure
 credentials = {
-    'credentials': {
-        'usernames': users,
+    "credentials": {
+        "usernames": users,
     },
-    'cookie': {
-        'expiry_days': 0,
-        'key': 'health_assistant_app_key',
-        'name': 'health_assistant_cookie',
+    "cookie": {
+        "expiry_days": 0,
+        "key": "health_assistant_app_key",
+        "name": "health_assistant_cookie",
     },
-    'preauthorized': {
-        'emails': [
-            'alice@example.com',
-            'bob@example.com',
-            'charlie@example.com',
+    "preauthorized": {
+        "emails": [
+            "alice@example.com",
+            "bob@example.com",
+            "charlie@example.com",
         ],
     },
 }
 
 # Save to YAML file
-with open('credentials.yaml', 'w') as creds_file:
+with open("credentials.yaml", "w") as creds_file:
     yaml.dump(
         credentials,
         creds_file,

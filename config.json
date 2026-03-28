@@ -24,7 +24,7 @@
     "window_seconds": 3600
   },
   "limits": {
-    "summary_max_chars": 3000,
+    "summary_max_chars": 10000,
     "lab_report_max_chars": 4000
   }
 }
