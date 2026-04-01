@@ -30,11 +30,6 @@ from core.config import TOOL_SEARCH_KB
 
 logger = logging.getLogger(__name__)
 
-MAX_CONTEXT_MESSAGES: int = 20
-"""Maximum number of recent messages sent to the LLM.  The full history
-remains in the checkpoint; this limit prevents context-window overflow
-and keeps per-turn token costs under control."""
-
 
 # ── State Schema ─────────────────────────────────────────────────────────
 class AgentState(TypedDict):
@@ -48,6 +43,8 @@ def build_graph(
     llm: ChatOpenAI,
     tools: list[BaseTool],
     checkpointer: Any | None = None,
+    *,
+    max_context_messages: int,
 ) -> Any:
     """Build and compile the agent graph.
 
@@ -57,6 +54,9 @@ def build_graph(
         checkpointer: Optional LangGraph checkpointer for persistent
             memory.  When provided, the graph saves and restores state
             automatically using a ``thread_id`` passed at invoke time.
+        max_context_messages: Maximum number of recent messages sent
+            to the LLM.  The full history remains in the checkpoint;
+            this limit prevents context-window overflow.
 
     Returns:
         A compiled LangGraph runnable.
@@ -65,9 +65,10 @@ def build_graph(
 
     def agent_node(state: AgentState) -> dict:
         """Call the LLM with the current conversation and system prompt."""
-        recent_messages = state["messages"][-MAX_CONTEXT_MESSAGES:]
+        recent_messages = state["messages"][-max_context_messages:]
         response = llm_with_tools.invoke(
-            [SystemMessage(content=SYSTEM_PROMPT)] + recent_messages
+            [SystemMessage(content=SYSTEM_PROMPT)]
+            + recent_messages
         )
         # Extract token usage from response metadata.
         usage = getattr(response, "usage_metadata", None) or {}
@@ -121,7 +122,10 @@ def build_graph(
         # Find the corresponding ToolMessage with the retrieval results.
         kb_result: str = ""
         for msg in reversed(messages):
-            if isinstance(msg, ToolMessage) and msg.tool_call_id == kb_call_id:
+            if (
+                isinstance(msg, ToolMessage)
+                and msg.tool_call_id == kb_call_id
+            ):
                 kb_result = msg.content
                 break
 

@@ -12,6 +12,11 @@ credentials.yaml
 # Virtual environments
 .venv
 
+# SQLite checkpointer files
+checkpoints.db
+checkpoints.db-shm
+checkpoints.db-wal
+
 # Folders
 journal_attachments/
 lab_reports_samples/

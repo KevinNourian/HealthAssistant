@@ -3,11 +3,11 @@ Health and content guardrails for the Health Assistant.
 
 Provides two pre-processing checks that run before the agent is invoked:
 
-1. **Crisis detection** – fast, regex-based scan for medical emergencies
+1. **Crisis detection** fast, regex-based scan for medical emergencies
    and mental health crises.  Returns immediately with emergency resources
    so the LLM is never involved in a potential emergency situation.
 
-2. **Health topic validation** – a lightweight LLM classification call
+2. **Health topic validation** a lightweight LLM classification call
    that confirms the query is health-related before invoking the full agent.
    Defaults to *allow* on any error so legitimate queries are never silently
    blocked.

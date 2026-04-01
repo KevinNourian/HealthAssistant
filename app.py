@@ -28,13 +28,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.errors import GraphRecursionError
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from core.config import (
-    load_config,
-    save_config,
-    validate_api_keys,
-    MODEL_PRICING,
-    SOURCE_KNOWLEDGE_BASE,
-)
+from core.config import load_config, save_config, validate_api_keys, MODEL_PRICING, SOURCE_KNOWLEDGE_BASE
 from core.rate_limiter import check_and_record, RateLimitExceeded
 from core.auth import load_authenticator, render_login
 from core.user_data import init_session_state, save_user_data
@@ -213,7 +207,12 @@ tools = create_tools(
     SERPAPI_API_KEY,
     bp_readings_ref=st.session_state.bp_readings,
 )
-graph = build_graph(llm, tools, checkpointer=checkpointer)
+graph = build_graph(
+    llm,
+    tools,
+    checkpointer=checkpointer,
+    max_context_messages=config["llm"]["max_context_messages"],
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -241,6 +240,7 @@ def render_config_item(label: str, value: Any) -> None:
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
+
     st.markdown(f"**Welcome, {name}!**")
 
     try:
@@ -263,13 +263,11 @@ with st.sidebar:
 
         if st.form_submit_button("Add Reminder", use_container_width=True):
             if reminder_text:
-                st.session_state.reminders.append(
-                    {
-                        "text": reminder_text,
-                        "date": reminder_date.strftime("%Y-%m-%d"),
-                        "id": len(st.session_state.reminders),
-                    }
-                )
+                st.session_state.reminders.append({
+                    "text": reminder_text,
+                    "date": reminder_date.strftime("%Y-%m-%d"),
+                    "id": len(st.session_state.reminders),
+                })
                 save_user_data(username)
                 st.rerun()
 
@@ -282,19 +280,17 @@ with st.sidebar:
                     <div style="padding: 8px 0;
                                 border-bottom: 1px solid #E8E8E8;">
                         <span style="color: #6B7280; font-size: 12px;
-                               font-weight: 500;">{reminder["date"]}</span>
+                               font-weight: 500;">{reminder['date']}</span>
                         <br>
                         <span style="color: #1F2937;
-                               font-size: 13px;">{reminder["text"]}</span>
+                               font-size: 13px;">{reminder['text']}</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
             with col2:
                 if st.button(
-                    "✕",
-                    key=f"del_rem_{i}",
-                    help="Delete",
+                    "✕", key=f"del_rem_{i}", help="Delete",
                     use_container_width=True,
                 ):
                     st.session_state.reminders.pop(i)
@@ -343,9 +339,10 @@ with st.sidebar:
 
     model_name: str = config["llm"]["model"]
     pricing = MODEL_PRICING.get(model_name, MODEL_PRICING["gpt-4o-mini"])
-    total_cost: float = (total_input / 1_000_000) * pricing["input"] + (
-        total_output / 1_000_000
-    ) * pricing["output"]
+    total_cost: float = (
+        (total_input / 1_000_000) * pricing["input"]
+        + (total_output / 1_000_000) * pricing["output"]
+    )
 
     render_config_item("Input", f"{total_input:,}")
     render_config_item("Output", f"{total_output:,}")
@@ -360,14 +357,9 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════════════
 st.title("Health Assistant")
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    [
-        "Chat",
-        "Manage Documents",
-        "Blood Pressure",
-        "Journal",
-    ]
-)
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Chat", "Manage Documents", "Blood Pressure", "Journal",
+])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -384,11 +376,12 @@ with tab1:
     if st.session_state.conversation_history:
         st.markdown("---")
         for qa in st.session_state.conversation_history:
+
             st.markdown(
                 f"""
                 <div class="chat-question">
                     <strong style="color: #1F2937;">Q:</strong>
-                    {qa["question"]}
+                    {qa['question']}
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -398,7 +391,7 @@ with tab1:
                 f"""
                 <div class="chat-answer">
                     <strong style="color: #1F2937;">A:</strong><br><br>
-                    {qa["answer"]}
+                    {qa['answer']}
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -425,7 +418,9 @@ with tab1:
     # Input area
     question: str = st.text_input(
         "Question",
-        placeholder=("e.g. What does my knowledge base say about blood pressure?"),
+        placeholder=(
+            "e.g. What does my knowledge base say about blood pressure?"
+        ),
         key=f"health_question_{st.session_state.question_counter}",
         label_visibility="collapsed",
     )
@@ -440,16 +435,12 @@ with tab1:
 
     with col_ask:
         ask_button: bool = st.button(
-            "Ask",
-            key="ask_btn",
-            use_container_width=True,
+            "Ask", key="ask_btn", use_container_width=True,
         )
 
     with col_clear:
         if st.button(
-            "Clear Chat",
-            key="clear_btn",
-            use_container_width=True,
+            "Clear Chat", key="clear_btn", use_container_width=True,
         ):
             st.session_state.conversation_history = []
             st.session_state.chat_thread_counter += 1
@@ -498,17 +489,23 @@ with tab1:
                             state_snapshot = graph.get_state(
                                 {"configurable": {"thread_id": thread_id}}
                             )
-                            prev_msgs = state_snapshot.values.get("messages", [])
+                            prev_msgs = state_snapshot.values.get(
+                                "messages", []
+                            )
                             # Use the last 4 messages (2 exchanges) max.
                             for msg in prev_msgs[-4:]:
                                 role = msg.type  # "human" or "ai"
-                                recent_context += f"{role}: {msg.content[:200]}\n"
+                                recent_context += (
+                                    f"{role}: {msg.content[:200]}\n"
+                                )
 
                         if not uploaded_lab and not is_health_related(
                             question, llm, recent_context=recent_context
                         ):
                             out_of_scope = True
-                            logger.info("Query rejected by topic scope guardrail")
+                            logger.info(
+                                "Query rejected by topic scope guardrail"
+                            )
                         else:
                             # If a PDF is attached, extract text and include it
                             user_message: str = question
@@ -531,7 +528,8 @@ with tab1:
                                         "image-based."
                                     )
                                     logger.warning(
-                                        "PDF text extraction returned empty content"
+                                        "PDF text extraction returned "
+                                        "empty content"
                                     )
 
                             if not ask_error:
@@ -547,7 +545,9 @@ with tab1:
                                 # identify new messages and token deltas.
                                 state_before = graph.get_state(invoke_config)
                                 prev_values = state_before.values or {}
-                                msgs_before: int = len(prev_values.get("messages", []))
+                                msgs_before: int = len(
+                                    prev_values.get("messages", [])
+                                )
                                 tokens_in_before: int = prev_values.get(
                                     "input_tokens", 0
                                 )
@@ -559,43 +559,48 @@ with tab1:
                                     {"messages": [HumanMessage(content=user_message)]},
                                     invoke_config,
                                 )
-                                answer_text: str = result["messages"][-1].content
+                                answer_text: str = (
+                                    result["messages"][-1].content
+                                )
 
                                 # Per-turn token counts (delta).
                                 turn_input_tokens: int = (
-                                    result.get("input_tokens", 0) - tokens_in_before
+                                    result.get("input_tokens", 0)
+                                    - tokens_in_before
                                 )
                                 turn_output_tokens: int = (
-                                    result.get("output_tokens", 0) - tokens_out_before
+                                    result.get("output_tokens", 0)
+                                    - tokens_out_before
                                 )
 
                                 # Identify tools and extract sources
                                 # from only the new messages this turn.
                                 new_messages = result["messages"][msgs_before:]
-                                tools_used, sources = extract_tools_and_sources(
-                                    new_messages
+                                tools_used, sources = (
+                                    extract_tools_and_sources(new_messages)
                                 )
 
-                                st.session_state.conversation_history.append(
-                                    {
-                                        "question": question,
-                                        "answer": answer_text,
-                                        "tools_used": tools_used,
-                                        "sources": sources,
-                                        "input_tokens": turn_input_tokens,
-                                        "output_tokens": turn_output_tokens,
-                                    }
-                                )
+                                st.session_state.conversation_history.append({
+                                    "question": question,
+                                    "answer": answer_text,
+                                    "tools_used": tools_used,
+                                    "sources": sources,
+                                    "input_tokens": turn_input_tokens,
+                                    "output_tokens": turn_output_tokens,
+                                })
 
                                 st.session_state.question_counter += 1
 
                     except RateLimitExceeded as e:
                         st.warning(str(e))
-                        logger.warning("Rate limit hit for user '%s'", username)
+                        logger.warning(
+                            "Rate limit hit for user '%s'", username
+                        )
                     except GraphRecursionError:
                         logger.warning("Agent hit recursion limit")
                         ask_error = (
-                            "I wasn't able to complete the request. Please try again."
+                            "I wasn't able to complete the request. "
+                            "Please try again."
                         )
                     except Exception as e:
                         logger.error("Error during agent invocation: %s", e)
@@ -642,8 +647,7 @@ with tab2:
 
             with col2:
                 if st.button(
-                    "Delete",
-                    key=f"del_pdf_{idx}",
+                    "Delete", key=f"del_pdf_{idx}",
                     use_container_width=True,
                 ):
                     try:
@@ -674,15 +678,17 @@ with tab2:
         "Upload PDF",
         type=["pdf"],
         key="kb_pdf_upload",
-        help=("Upload health-related PDF documents to add to your knowledge base"),
+        help=(
+            "Upload health-related PDF documents to add "
+            "to your knowledge base"
+        ),
     )
 
     if uploaded_pdf:
         st.success(f"✓ Selected: **{uploaded_pdf.name}**")
 
         if st.button(
-            "Add to Knowledge Base",
-            type="primary",
+            "Add to Knowledge Base", type="primary",
             use_container_width=True,
         ):
             add_success: bool = False
@@ -739,32 +745,22 @@ with tab3:
             bp_time = st.time_input("Time", key="bp_time")
         with bp_cols[2]:
             bp_systolic = st.number_input(
-                "Systolic",
-                min_value=60,
-                max_value=250,
-                value=120,
+                "Systolic", min_value=60, max_value=250, value=120,
                 key="bp_systolic",
             )
         with bp_cols[3]:
             bp_diastolic = st.number_input(
-                "Diastolic",
-                min_value=30,
-                max_value=150,
-                value=80,
+                "Diastolic", min_value=30, max_value=150, value=80,
                 key="bp_diastolic",
             )
         with bp_cols[4]:
             bp_pulse = st.number_input(
-                "Pulse",
-                min_value=30,
-                max_value=220,
-                value=72,
+                "Pulse", min_value=30, max_value=220, value=72,
                 key="bp_pulse",
             )
 
         if st.form_submit_button(
-            "Save Reading",
-            use_container_width=True,
+            "Save Reading", use_container_width=True,
         ):
             reading: dict[str, Any] = {
                 "date": bp_date.strftime("%Y-%m-%d"),
@@ -792,30 +788,24 @@ with tab3:
         df["label"] = df["datetime"].dt.strftime("%b %d, %Y")
 
         fig = go.Figure()
-        fig.add_trace(
-            go.Bar(
-                name="Systolic",
-                x=df["label"],
-                y=df["systolic"],
-                marker_color="#EF4444",
-            )
-        )
-        fig.add_trace(
-            go.Bar(
-                name="Diastolic",
-                x=df["label"],
-                y=df["diastolic"],
-                marker_color="#3B82F6",
-            )
-        )
-        fig.add_trace(
-            go.Bar(
-                name="Pulse",
-                x=df["label"],
-                y=df.get("pulse", pd.Series([0] * len(df))),
-                marker_color="#10B981",
-            )
-        )
+        fig.add_trace(go.Bar(
+            name="Systolic",
+            x=df["label"],
+            y=df["systolic"],
+            marker_color="#EF4444",
+        ))
+        fig.add_trace(go.Bar(
+            name="Diastolic",
+            x=df["label"],
+            y=df["diastolic"],
+            marker_color="#3B82F6",
+        ))
+        fig.add_trace(go.Bar(
+            name="Pulse",
+            x=df["label"],
+            y=df.get("pulse", pd.Series([0] * len(df))),
+            marker_color="#10B981",
+        ))
         fig.update_layout(
             barmode="group",
             xaxis_title="Date",
@@ -829,8 +819,12 @@ with tab3:
         # ── Readings ──────────────────────────────────────────────────────
         st.markdown("#### Readings")
 
-        for idx, reading in enumerate(reversed(st.session_state.bp_readings)):
-            real_idx: int = len(st.session_state.bp_readings) - 1 - idx
+        for idx, reading in enumerate(
+            reversed(st.session_state.bp_readings)
+        ):
+            real_idx: int = (
+                len(st.session_state.bp_readings) - 1 - idx
+            )
 
             with st.container(border=True):
                 col_date, col_sys, col_dia, col_pulse, col_del = st.columns(
@@ -838,13 +832,18 @@ with tab3:
                 )
 
                 with col_date:
-                    parsed_date = datetime.strptime(reading["date"], "%Y-%m-%d")
+                    parsed_date = datetime.strptime(
+                        reading["date"], "%Y-%m-%d"
+                    )
                     display_date = (
                         f"{parsed_date.strftime('%B')} "
                         f"{parsed_date.day}, "
                         f"{parsed_date.year}"
                     )
-                    st.markdown(f"**{display_date}**  \n{reading.get('time', '')}")
+                    st.markdown(
+                        f"**{display_date}**  \n"
+                        f"{reading.get('time', '')}"
+                    )
                 with col_sys:
                     st.metric(
                         label="Systolic",
@@ -872,7 +871,9 @@ with tab3:
                         logger.info("Blood pressure reading deleted")
                         st.rerun()
     else:
-        st.info("No readings yet. Start tracking your blood pressure!")
+        st.info(
+            "No readings yet. Start tracking your blood pressure!"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -920,17 +921,29 @@ with tab4:
                     "title": journal_title,
                     "date": journal_date.strftime("%Y-%m-%d"),
                     "entry": journal_entry,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "timestamp": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
                 }
 
                 if uploaded_file is not None:
-                    attachment_dir: str = f"journal_attachments/{username}"
+                    attachment_dir: str = (
+                        f"journal_attachments/{username}"
+                    )
                     os.makedirs(attachment_dir, exist_ok=True)
 
-                    timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    file_extension: str = uploaded_file.name.rsplit(".", 1)[-1].lower()
-                    safe_filename: str = f"{timestamp}_{uploaded_file.name}"
-                    file_path: str = os.path.join(attachment_dir, safe_filename)
+                    timestamp: str = datetime.now().strftime(
+                        "%Y%m%d_%H%M%S"
+                    )
+                    file_extension: str = (
+                        uploaded_file.name.rsplit(".", 1)[-1].lower()
+                    )
+                    safe_filename: str = (
+                        f"{timestamp}_{uploaded_file.name}"
+                    )
+                    file_path: str = os.path.join(
+                        attachment_dir, safe_filename
+                    )
 
                     with open(file_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
@@ -941,8 +954,7 @@ with tab4:
                         "type": file_extension,
                     }
                     logger.info(
-                        "Journal attachment saved: %s",
-                        file_path,
+                        "Journal attachment saved: %s", file_path,
                     )
 
                 st.session_state.journal_entries.append(entry_data)
@@ -962,7 +974,9 @@ with tab4:
 
         for entry in reversed(st.session_state.journal_entries):
             attachment_icon: str = " 📎" if "attachment" in entry else ""
-            is_editing: bool = st.session_state.editing_entry == entry["timestamp"]
+            is_editing: bool = (
+                st.session_state.editing_entry == entry["timestamp"]
+            )
 
             with st.container(border=True):
                 if is_editing:
@@ -988,14 +1002,16 @@ with tab4:
                             key=f"save_{entry['timestamp']}",
                             use_container_width=True,
                         ):
-                            for idx, e in enumerate(st.session_state.journal_entries):
+                            for idx, e in enumerate(
+                                st.session_state.journal_entries
+                            ):
                                 if e["timestamp"] == entry["timestamp"]:
-                                    st.session_state.journal_entries[idx]["title"] = (
-                                        edited_title
-                                    )
-                                    st.session_state.journal_entries[idx]["entry"] = (
-                                        edited_entry_text
-                                    )
+                                    st.session_state.journal_entries[idx][
+                                        "title"
+                                    ] = edited_title
+                                    st.session_state.journal_entries[idx][
+                                        "entry"
+                                    ] = edited_entry_text
                                     break
                             save_user_data(username)
                             st.session_state.editing_entry = None
@@ -1012,7 +1028,9 @@ with tab4:
                             st.session_state.editing_entry = None
                             st.rerun()
                 else:
-                    parsed_journal_date = datetime.strptime(entry["date"], "%Y-%m-%d")
+                    parsed_journal_date = datetime.strptime(
+                        entry["date"], "%Y-%m-%d"
+                    )
                     journal_display_date = (
                         f"{parsed_journal_date.strftime('%B')} "
                         f"{parsed_journal_date.day}, "
@@ -1054,7 +1072,9 @@ with tab4:
                             key=f"edit_{entry['timestamp']}",
                             use_container_width=True,
                         ):
-                            st.session_state.editing_entry = entry["timestamp"]
+                            st.session_state.editing_entry = (
+                                entry["timestamp"]
+                            )
                             st.rerun()
 
                     with col_delete:
@@ -1075,12 +1095,13 @@ with tab4:
                                         os.remove(filepath)
                                     except OSError as e:
                                         logger.error(
-                                            "Failed to delete attachment %s: %s",
-                                            filepath,
-                                            e,
+                                            "Failed to delete attachment "
+                                            "%s: %s", filepath, e,
                                         )
 
-                            for idx, e in enumerate(st.session_state.journal_entries):
+                            for idx, e in enumerate(
+                                st.session_state.journal_entries
+                            ):
                                 if e["timestamp"] == entry["timestamp"]:
                                     st.session_state.journal_entries.pop(idx)
                                     break
@@ -1089,4 +1110,6 @@ with tab4:
                             logger.info("Journal entry deleted")
                             st.rerun()
     else:
-        st.info("No journal entries yet. Start tracking your health journey!")
+        st.info(
+            "No journal entries yet. Start tracking your health journey!"
+        )

@@ -17,7 +17,8 @@
   },
   "llm": {
     "model": "gpt-4o-mini",
-    "temperature": 0
+    "temperature": 0,
+    "max_context_messages": 20
   },
   "rate_limit": {
     "max_requests": 20,
