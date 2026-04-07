@@ -55,7 +55,7 @@ def create_tools(
         from uploaded medical documents. Use this tool when
         the user asks a health question that might be
         answered by their personal document library."""
-
+        
         logger.info("search_knowledge_base called with query: %s", query)
         try:
             # Query rewriting: rephrase the conversational query into a
@@ -99,7 +99,9 @@ def create_tools(
                 snippet = item.get("snippet", "")
                 link = item.get("link", "")
                 if title and snippet:
-                    snippets.append(f"**{title}**\n{snippet}\nURL: {link}")
+                    snippets.append(
+                        f"**{title}**\n{snippet}\nURL: {link}"
+                    )
             if not snippets:
                 logger.info("Web search returned no usable results")
                 return "No web results found."
@@ -126,9 +128,14 @@ def create_tools(
                 break
 
         if not matched_path:
-            available = ", ".join(os.path.basename(p) for p in config["pdf_files"])
+            available = ", ".join(
+                os.path.basename(p) for p in config["pdf_files"]
+            )
             logger.warning("Document '%s' not found in config", filename)
-            return f"Document '{filename}' not found. Available documents: {available}"
+            return (
+                f"Document '{filename}' not found. "
+                f"Available documents: {available}"
+            )
 
         try:
             normalized = normalize_source_path(matched_path)
@@ -143,18 +150,25 @@ def create_tools(
                 )
             if not docs:
                 logger.warning("No chunks found for %s", matched_path)
-                return f"No content found for {os.path.basename(matched_path)}"
+                return (
+                    f"No content found for "
+                    f"{os.path.basename(matched_path)}"
+                )
 
             # Count total chunks for this document to inform the user.
-            all_chunks = vectorstore.get(where={"source": normalized})
+            all_chunks = vectorstore.get(
+                where={"source": normalized}
+            )
             total_chunks = len(all_chunks.get("ids", []))
             if total_chunks == 0:
-                all_chunks = vectorstore.get(where={"source": matched_path})
+                all_chunks = vectorstore.get(
+                    where={"source": matched_path}
+                )
                 total_chunks = len(all_chunks.get("ids", []))
 
             combined_text = "\n\n".join(doc.page_content for doc in docs)
             prompt = SUMMARY_PROMPT.format(
-                content=combined_text[: config["limits"]["summary_max_chars"]]
+                content=combined_text[:config["limits"]["summary_max_chars"]]
             )
             logger.info(
                 "Summarizing %d of %d chunks (%d chars)",
@@ -194,7 +208,9 @@ def create_tools(
 
         try:
             prompt = LAB_ANALYSIS_PROMPT.format(
-                report_text=report_text[: config["limits"]["lab_report_max_chars"]]
+                report_text=report_text[
+                    :config["limits"]["lab_report_max_chars"]
+                ]
             )
             response = llm.invoke(prompt)
             return response.content
@@ -217,16 +233,25 @@ def create_tools(
                 return "No blood pressure readings recorded yet."
             lines: list[str] = []
             for r in bp_readings_ref:
-                pulse_str = f", pulse {r['pulse']} BPM" if r.get("pulse") else ""
+                pulse_str = (
+                    f", pulse {r['pulse']} BPM"
+                    if r.get("pulse") else ""
+                )
                 lines.append(
                     f"{r['date']} {r.get('time', '')} — "
                     f"{r['systolic']}/{r['diastolic']} mmHg"
                     f"{pulse_str}"
                 )
-            logger.info("Returning %d blood pressure readings", len(bp_readings_ref))
+            logger.info(
+                "Returning %d blood pressure readings", len(bp_readings_ref)
+            )
             return (
                 f"Blood pressure readings ({len(bp_readings_ref)} total):\n"
                 + "\n".join(lines)
+                + "\n\nNote: Present these readings factually. Do not "
+                "classify them into medical categories or suggest they "
+                "indicate any condition. Remind the user to consult "
+                "their healthcare provider for interpretation."
             )
         except Exception as e:
             logger.error("Blood pressure data retrieval failed: %s", e)

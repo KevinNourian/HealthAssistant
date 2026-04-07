@@ -6,16 +6,95 @@ focused on display and user interaction.
 """
 
 import logging
+from dataclasses import dataclass, field
 from io import BytesIO
+from typing import Any
 
 from pypdf import PdfReader
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langgraph.errors import GraphRecursionError
 
-from core.config import SOURCE_KNOWLEDGE_BASE, SOURCE_URL_PREFIX, TOOL_SEARCH_KB
+from core.config import (
+    MODEL_PRICING,
+    SOURCE_KNOWLEDGE_BASE,
+    SOURCE_URL_PREFIX,
+    TOOL_SEARCH_KB,
+)
+from core.guardrails import check_for_crisis, is_health_related, CrisisResult
+from core.rate_limiter import check_and_record, RateLimitExceeded
 
 logger = logging.getLogger(__name__)
 
 
+# ── Result Types ─────────────────────────────────────────────────────────
+@dataclass
+class QueryResult:
+    """Result of processing a user query through the agent pipeline."""
+
+    success: bool = False
+    answer: str = ""
+    tools_used: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    crisis: CrisisResult | None = None
+    out_of_scope: bool = False
+    error: str | None = None
+
+
+@dataclass
+class CostSummary:
+    """Cumulative token usage and cost for a session."""
+
+    total_input: int = 0
+    total_output: int = 0
+    total_cost: float = 0.0
+
+
+# ── Thread ID ────────────────────────────────────────────────────────────
+def build_thread_id(username: str, counter: int) -> str:
+    """Construct a checkpoint thread ID from username and counter.
+
+    Args:
+        username: The authenticated username.
+        counter: The chat thread counter (incremented on Clear Chat).
+
+    Returns:
+        A string like ``"alice_0"`` or ``"bob_3"``.
+    """
+    return f"{username}_{counter}"
+
+
+# ── Conversation Context ─────────────────────────────────────────────────
+def get_recent_context(graph: Any, thread_id: str, max_messages: int = 4) -> str:
+    """Extract recent conversation context from the checkpoint.
+
+    Used to give the health topic classifier context for follow-up
+    queries like "explain that in simpler terms."
+
+    Args:
+        graph: The compiled LangGraph runnable.
+        thread_id: The checkpoint thread ID.
+        max_messages: Maximum number of recent messages to include.
+
+    Returns:
+        A formatted string of recent messages, or empty string if
+        no history exists.
+    """
+    try:
+        state_snapshot = graph.get_state({"configurable": {"thread_id": thread_id}})
+        prev_msgs = state_snapshot.values.get("messages", [])
+        context = ""
+        for msg in prev_msgs[-max_messages:]:
+            role = msg.type
+            context += f"{role}: {msg.content[:200]}\n"
+        return context
+    except Exception as e:
+        logger.error("Failed to get recent context: %s", e)
+        return ""
+
+
+# ── PDF Extraction ───────────────────────────────────────────────────────
 def extract_pdf_text(uploaded_file) -> str:
     """Extract text content from an uploaded PDF file.
 
@@ -35,6 +114,7 @@ def extract_pdf_text(uploaded_file) -> str:
         return ""
 
 
+# ── Message Parsing ──────────────────────────────────────────────────────
 def extract_tools_and_sources(
     messages: list[BaseMessage],
 ) -> tuple[list[str], list[str]]:
@@ -71,3 +151,149 @@ def extract_tools_and_sources(
         sources = [SOURCE_KNOWLEDGE_BASE]
 
     return tools_used, sources
+
+
+# ── Query Processing ─────────────────────────────────────────────────────
+def process_query(
+    graph: Any,
+    llm: Any,
+    question: str,
+    uploaded_lab: Any | None,
+    username: str,
+    chat_thread_counter: int,
+    config: dict[str, Any],
+) -> QueryResult:
+    """Process a user query through the full agent pipeline.
+
+    Runs guardrails, rate limiting, optional PDF extraction, graph
+    invocation, and post-processing.  Returns a ``QueryResult`` that
+    ``app.py`` can use to render the appropriate UI response.
+
+    Args:
+        graph: The compiled LangGraph runnable.
+        llm: The ChatOpenAI instance (for the health topic classifier).
+        question: The user's question text.
+        uploaded_lab: Optional uploaded lab report PDF file.
+        username: The authenticated username.
+        chat_thread_counter: Current chat thread counter.
+        config: Application configuration dictionary.
+
+    Returns:
+        A ``QueryResult`` describing the outcome.
+    """
+    result = QueryResult()
+
+    # ── Guardrail 1: Crisis detection (regex, no LLM) ────────────────
+    crisis = check_for_crisis(question)
+    if crisis.detected:
+        result.crisis = crisis
+        return result
+
+    # ── Rate limit check ─────────────────────────────────────────────
+    try:
+        check_and_record(
+            username,
+            config["rate_limit"]["max_requests"],
+            config["rate_limit"]["window_seconds"],
+        )
+    except RateLimitExceeded as e:
+        result.error = str(e)
+        return result
+
+    # ── Guardrail 2: Health topic scope (LLM check) ──────────────────
+    # Skip when a lab PDF is attached — context is clear.
+    thread_id = build_thread_id(username, chat_thread_counter)
+
+    if not uploaded_lab:
+        recent_context = get_recent_context(graph, thread_id)
+        if not is_health_related(question, llm, recent_context=recent_context):
+            result.out_of_scope = True
+            logger.info("Query rejected by topic scope guardrail")
+            return result
+
+    # ── PDF extraction (if lab report attached) ──────────────────────
+    user_message: str = question
+    if uploaded_lab:
+        logger.info(
+            "Extracting text from uploaded PDF: %s",
+            uploaded_lab.name,
+        )
+        pdf_text = extract_pdf_text(uploaded_lab)
+        if pdf_text.strip():
+            user_message = f"{question}\n\n[Attached lab report text]\n{pdf_text}"
+        else:
+            result.error = (
+                "Could not extract text from the uploaded PDF. "
+                "The file may be image-based."
+            )
+            logger.warning("PDF text extraction returned empty content")
+            return result
+
+    # ── Graph invocation ─────────────────────────────────────────────
+    try:
+        invoke_config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 10,
+        }
+
+        # Snapshot state before invoke for token deltas.
+        state_before = graph.get_state(invoke_config)
+        prev_values = state_before.values or {}
+        msgs_before: int = len(prev_values.get("messages", []))
+        tokens_in_before: int = prev_values.get("input_tokens", 0)
+        tokens_out_before: int = prev_values.get("output_tokens", 0)
+
+        graph_result = graph.invoke(
+            {"messages": [HumanMessage(content=user_message)]},
+            invoke_config,
+        )
+
+        result.success = True
+        result.answer = graph_result["messages"][-1].content
+
+        # Per-turn token counts (delta).
+        result.input_tokens = graph_result.get("input_tokens", 0) - tokens_in_before
+        result.output_tokens = graph_result.get("output_tokens", 0) - tokens_out_before
+
+        # Extract tools and sources from new messages.
+        new_messages = graph_result["messages"][msgs_before:]
+        result.tools_used, result.sources = extract_tools_and_sources(new_messages)
+
+    except GraphRecursionError:
+        logger.warning("Agent hit recursion limit")
+        result.error = "I wasn't able to complete the request. Please try again."
+    except Exception as e:
+        logger.error("Error during agent invocation: %s", e)
+        result.error = str(e)
+
+    return result
+
+
+# ── Cost Calculation ─────────────────────────────────────────────────────
+def calculate_session_cost(
+    conversation_history: list[dict[str, Any]],
+    model_name: str,
+) -> CostSummary:
+    """Calculate cumulative token usage and cost for the session.
+
+    Args:
+        conversation_history: List of conversation turn dicts, each
+            containing ``input_tokens`` and ``output_tokens``.
+        model_name: The model name to look up in ``MODEL_PRICING``.
+
+    Returns:
+        A ``CostSummary`` with total tokens and cost.
+    """
+    total_input = sum(qa.get("input_tokens", 0) for qa in conversation_history)
+    total_output = sum(qa.get("output_tokens", 0) for qa in conversation_history)
+
+    pricing = MODEL_PRICING.get(model_name, MODEL_PRICING["gpt-4o-mini"])
+    total_cost = (total_input / 1_000_000) * pricing["input"] + (
+        total_output / 1_000_000
+    ) * pricing["output"]
+
+    return CostSummary(
+        total_input=total_input,
+        total_output=total_output,
+        total_cost=total_cost,
+    )

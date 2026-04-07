@@ -66,6 +66,16 @@ def build_graph(
     def agent_node(state: AgentState) -> dict:
         """Call the LLM with the current conversation and system prompt."""
         recent_messages = state["messages"][-max_context_messages:]
+
+        # Ensure the window doesn't start with orphaned ToolMessages.
+        # OpenAI requires every ToolMessage to follow the AIMessage
+        # that requested it.  If the slice cut between an AIMessage
+        # and its ToolMessage responses, skip the orphaned ones.
+        while recent_messages and isinstance(
+            recent_messages[0], ToolMessage
+        ):
+            recent_messages = recent_messages[1:]
+
         response = llm_with_tools.invoke(
             [SystemMessage(content=SYSTEM_PROMPT)]
             + recent_messages

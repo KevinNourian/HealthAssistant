@@ -5,7 +5,7 @@
     "data/Hypertension.pdf",
     "data/Heart_Disease.pdf",
     "data/Physical_wellness.pdf",
-    "data\\Lung_Cancer.pdf"
+    "data\\lung_cancer.pdf"
   ],
   "chroma_directory": "data/chroma_db",
   "chunking": {

@@ -24,18 +24,15 @@ from typing import Any
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
-from langgraph.errors import GraphRecursionError
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from core.config import load_config, save_config, validate_api_keys, MODEL_PRICING, SOURCE_KNOWLEDGE_BASE
-from core.rate_limiter import check_and_record, RateLimitExceeded
+from core.config import load_config, save_config, validate_api_keys, SOURCE_KNOWLEDGE_BASE
 from core.auth import load_authenticator, render_login
 from core.user_data import init_session_state, save_user_data
 from core.tools import create_tools
 from core.agent import build_graph
-from core.guardrails import check_for_crisis, is_health_related, CrisisType
-from core.utils import extract_pdf_text, extract_tools_and_sources
+from core.guardrails import CrisisType
+from core.utils import process_query, calculate_session_cost
 from core.vector_store import (
     get_or_create_vectorstore,
     get_hybrid_retriever,
@@ -120,11 +117,6 @@ username: str = st.session_state["username"]
 logger.info("Authenticated session for user '%s'", username)
 
 init_session_state(username)
-
-# Thread counter for checkpointed conversations.  Incrementing this
-# starts a fresh conversation thread while preserving old checkpoints.
-if "chat_thread_counter" not in st.session_state:
-    st.session_state.chat_thread_counter = 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -328,25 +320,14 @@ with st.sidebar:
     # ── Token Usage ──────────────────────────────────────────────────────
     st.markdown("### 📊 Token Usage")
 
-    total_input: int = sum(
-        qa.get("input_tokens", 0)
-        for qa in st.session_state.get("conversation_history", [])
-    )
-    total_output: int = sum(
-        qa.get("output_tokens", 0)
-        for qa in st.session_state.get("conversation_history", [])
+    cost = calculate_session_cost(
+        st.session_state.get("conversation_history", []),
+        config["llm"]["model"],
     )
 
-    model_name: str = config["llm"]["model"]
-    pricing = MODEL_PRICING.get(model_name, MODEL_PRICING["gpt-4o-mini"])
-    total_cost: float = (
-        (total_input / 1_000_000) * pricing["input"]
-        + (total_output / 1_000_000) * pricing["output"]
-    )
-
-    render_config_item("Input", f"{total_input:,}")
-    render_config_item("Output", f"{total_output:,}")
-    render_config_item("Cost", f"${total_cost:.6f}")
+    render_config_item("Input", f"{cost.total_input:,}")
+    render_config_item("Output", f"{cost.total_output:,}")
+    render_config_item("Cost", f"${cost.total_cost:.6f}")
 
     st.markdown("---")
     st.caption("Powered by OpenAI & LangChain")
@@ -444,15 +425,27 @@ with tab1:
         ):
             st.session_state.conversation_history = []
             st.session_state.chat_thread_counter += 1
+            st.session_state.question_counter += 1
+            save_user_data(username)
             logger.info("Chat history cleared by user")
             st.rerun()
 
     if ask_button:
         if question:
-            # ── Guardrail 1: Crisis detection (regex, no LLM) ─────────────
-            crisis = check_for_crisis(question)
-            if crisis.detected:
-                if crisis.crisis_type == CrisisType.MENTAL_HEALTH_CRISIS:
+            with st.spinner("Thinking..."):
+                result = process_query(
+                    graph=graph,
+                    llm=llm,
+                    question=question,
+                    uploaded_lab=uploaded_lab,
+                    username=username,
+                    chat_thread_counter=st.session_state.chat_thread_counter,
+                    config=config,
+                )
+
+            # ── Display result ────────────────────────────────────────────
+            if result.crisis:
+                if result.crisis.crisis_type == CrisisType.MENTAL_HEALTH_CRISIS:
                     st.error(
                         "It sounds like you may be going through a very "
                         "difficult time. Please reach out for support "
@@ -463,158 +456,38 @@ with tab1:
                         "This sounds like it could be a medical emergency. "
                         "Please seek immediate help."
                     )
-                for resource in crisis.resources:
+                for resource in result.crisis.resources:
                     st.markdown(resource)
-            else:
-                out_of_scope: bool = False
-                with st.spinner("Thinking..."):
-                    ask_error: str | None = None
-                    try:
-                        # ── Rate limit check ──────────────────────────────
-                        check_and_record(
-                            username,
-                            config["rate_limit"]["max_requests"],
-                            config["rate_limit"]["window_seconds"],
-                        )
-
-                        # ── Guardrail 2: Health topic scope (LLM check) ───
-                        # Skip when a lab PDF is attached — context is clear.
-                        # Pull recent context from the checkpoint so the
-                        # classifier can handle follow-up queries.
-                        recent_context = ""
-                        if not uploaded_lab:
-                            thread_id = (
-                                f"{username}_{st.session_state.chat_thread_counter}"
-                            )
-                            state_snapshot = graph.get_state(
-                                {"configurable": {"thread_id": thread_id}}
-                            )
-                            prev_msgs = state_snapshot.values.get(
-                                "messages", []
-                            )
-                            # Use the last 4 messages (2 exchanges) max.
-                            for msg in prev_msgs[-4:]:
-                                role = msg.type  # "human" or "ai"
-                                recent_context += (
-                                    f"{role}: {msg.content[:200]}\n"
-                                )
-
-                        if not uploaded_lab and not is_health_related(
-                            question, llm, recent_context=recent_context
-                        ):
-                            out_of_scope = True
-                            logger.info(
-                                "Query rejected by topic scope guardrail"
-                            )
-                        else:
-                            # If a PDF is attached, extract text and include it
-                            user_message: str = question
-                            if uploaded_lab:
-                                logger.info(
-                                    "Extracting text from uploaded PDF: %s",
-                                    uploaded_lab.name,
-                                )
-                                pdf_text = extract_pdf_text(uploaded_lab)
-                                if pdf_text.strip():
-                                    user_message = (
-                                        f"{question}\n\n"
-                                        f"[Attached lab report text]\n"
-                                        f"{pdf_text}"
-                                    )
-                                else:
-                                    ask_error = (
-                                        "Could not extract text from the "
-                                        "uploaded PDF. The file may be "
-                                        "image-based."
-                                    )
-                                    logger.warning(
-                                        "PDF text extraction returned "
-                                        "empty content"
-                                    )
-
-                            if not ask_error:
-                                thread_id = (
-                                    f"{username}_{st.session_state.chat_thread_counter}"
-                                )
-                                invoke_config = {
-                                    "configurable": {"thread_id": thread_id},
-                                    "recursion_limit": 10,
-                                }
-
-                                # Snapshot state before invoke so we can
-                                # identify new messages and token deltas.
-                                state_before = graph.get_state(invoke_config)
-                                prev_values = state_before.values or {}
-                                msgs_before: int = len(
-                                    prev_values.get("messages", [])
-                                )
-                                tokens_in_before: int = prev_values.get(
-                                    "input_tokens", 0
-                                )
-                                tokens_out_before: int = prev_values.get(
-                                    "output_tokens", 0
-                                )
-
-                                result = graph.invoke(
-                                    {"messages": [HumanMessage(content=user_message)]},
-                                    invoke_config,
-                                )
-                                answer_text: str = (
-                                    result["messages"][-1].content
-                                )
-
-                                # Per-turn token counts (delta).
-                                turn_input_tokens: int = (
-                                    result.get("input_tokens", 0)
-                                    - tokens_in_before
-                                )
-                                turn_output_tokens: int = (
-                                    result.get("output_tokens", 0)
-                                    - tokens_out_before
-                                )
-
-                                # Identify tools and extract sources
-                                # from only the new messages this turn.
-                                new_messages = result["messages"][msgs_before:]
-                                tools_used, sources = (
-                                    extract_tools_and_sources(new_messages)
-                                )
-
-                                st.session_state.conversation_history.append({
-                                    "question": question,
-                                    "answer": answer_text,
-                                    "tools_used": tools_used,
-                                    "sources": sources,
-                                    "input_tokens": turn_input_tokens,
-                                    "output_tokens": turn_output_tokens,
-                                })
-
-                                st.session_state.question_counter += 1
-
-                    except RateLimitExceeded as e:
-                        st.warning(str(e))
-                        logger.warning(
-                            "Rate limit hit for user '%s'", username
-                        )
-                    except GraphRecursionError:
-                        logger.warning("Agent hit recursion limit")
-                        ask_error = (
-                            "I wasn't able to complete the request. "
-                            "Please try again."
-                        )
-                    except Exception as e:
-                        logger.error("Error during agent invocation: %s", e)
-                        ask_error = str(e)
-
-                if out_of_scope:
-                    st.info(
-                        "This assistant is designed for health and wellness "
-                        "questions only. Please ask a health-related question."
-                    )
-                elif ask_error:
-                    st.error(f"Error: {ask_error}")
-                else:
-                    st.rerun()
+                st.session_state.question_counter += 1
+            elif result.out_of_scope:
+                st.session_state.conversation_history.append({
+                    "question": question,
+                    "answer": (
+                        "This assistant is designed for health and "
+                        "wellness questions only. Please ask a "
+                        "health-related question."
+                    ),
+                    "tools_used": [],
+                    "sources": [],
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                })
+                st.session_state.question_counter += 1
+                st.rerun()
+            elif result.error:
+                st.error(f"Error: {result.error}")
+                st.session_state.question_counter += 1
+            elif result.success:
+                st.session_state.conversation_history.append({
+                    "question": question,
+                    "answer": result.answer,
+                    "tools_used": result.tools_used,
+                    "sources": result.sources,
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                })
+                st.session_state.question_counter += 1
+                st.rerun()
         else:
             st.warning("Please enter a question")
 

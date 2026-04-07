@@ -70,8 +70,9 @@ def save_user_data(username: str) -> None:
     """Persist the current session-state data for the given user.
 
     Reads ``st.session_state.reminders``,
-    ``st.session_state.journal_entries``, and
-    ``st.session_state.bp_readings`` and writes them to disk.
+    ``st.session_state.journal_entries``,
+    ``st.session_state.bp_readings``, and
+    ``st.session_state.chat_thread_counter`` and writes them to disk.
 
     Args:
         username: The authenticated username.
@@ -81,6 +82,9 @@ def save_user_data(username: str) -> None:
         "reminders": st.session_state.reminders,
         "journal_entries": st.session_state.journal_entries,
         "bp_readings": st.session_state.bp_readings,
+        "chat_thread_counter": st.session_state.get(
+            "chat_thread_counter", 0
+        ),
     }
     try:
         with open(filepath, "w") as data_file:
@@ -110,6 +114,9 @@ def init_session_state(username: str) -> None:
         st.session_state.reminders = user_data.get("reminders", [])
         st.session_state.journal_entries = user_data.get("journal_entries", [])
         st.session_state.bp_readings = user_data.get("bp_readings", [])
+        st.session_state.chat_thread_counter = user_data.get(
+            "chat_thread_counter", 0
+        )
         st.session_state.current_user = username
         st.session_state.file_uploader_key = 0
         st.session_state.journal_form_key = 0
@@ -127,6 +134,7 @@ def init_session_state(username: str) -> None:
         "agent_messages": [],
         "question_counter": 0,
         "bp_readings": [],
+        "chat_thread_counter": 0,
     }
     for key, default in defaults.items():
         if key not in st.session_state:
