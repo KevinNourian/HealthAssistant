@@ -338,8 +338,9 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════════════
 st.title("Health Assistant")
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "Chat", "Manage Documents", "Blood Pressure", "Journal",
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    "Chat", "Manage Documents", "Blood Pressure", "Medical Visit",
+    "Vaccination", "Prescription", "Lab Test", "Journal",
 ])
 
 
@@ -750,9 +751,1332 @@ with tab3:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 4: HEALTH JOURNAL
+# TAB 4: MEDICAL VISIT
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
+    st.markdown("### Medical Visit")
+    st.caption("Record and track your medical appointments")
+
+    # ── Entry Form ───────────────────────────────────────────────────────
+    mv_key = st.session_state.mv_form_key
+    mv_cols = st.columns([1, 1, 2])
+
+    with mv_cols[0]:
+        mv_date = st.date_input("Date", key=f"mv_date_{mv_key}")
+    with mv_cols[1]:
+        mv_time = st.time_input("Time", key=f"mv_time_{mv_key}")
+    with mv_cols[2]:
+        mv_doctor = st.text_input("Doctor", key=f"mv_doctor_{mv_key}")
+
+    mv_notes = st.text_area(
+        "Notes (Markdown supported)",
+        key=f"mv_notes_{mv_key}",
+        height=120,
+    )
+
+    col_save, col_cancel = st.columns(2)
+    with col_save:
+        if st.button("Save Visit", use_container_width=True):
+            if not mv_doctor.strip():
+                st.warning("Please enter a doctor name.")
+            else:
+                visit: dict[str, Any] = {
+                    "date": mv_date.strftime("%Y-%m-%d"),
+                    "time": mv_time.strftime("%H:%M"),
+                    "doctor": mv_doctor.strip(),
+                    "notes": mv_notes.strip(),
+                }
+                st.session_state.medical_visits.append(visit)
+                save_user_data(username)
+                st.session_state.mv_form_key += 1
+                logger.info("Medical visit saved: %s", visit)
+                st.rerun()
+    with col_cancel:
+        if st.button("Cancel", key="mv_cancel", use_container_width=True):
+            st.session_state.mv_form_key += 1
+            st.rerun()
+
+    # ── Visits ────────────────────────────────────────────────────────────
+    if st.session_state.medical_visits:
+        st.markdown("---")
+        st.markdown("#### Visits")
+
+        for idx, visit in enumerate(
+            reversed(st.session_state.medical_visits)
+        ):
+            real_idx: int = (
+                len(st.session_state.medical_visits) - 1 - idx
+            )
+            is_editing_visit: bool = (
+                st.session_state.editing_visit == real_idx
+            )
+
+            with st.container(border=True):
+                if is_editing_visit:
+                    st.markdown("**Editing Visit**")
+
+                    edit_mv_cols = st.columns([1, 1, 2])
+                    with edit_mv_cols[0]:
+                        edited_mv_date = st.date_input(
+                            "Date",
+                            value=datetime.strptime(
+                                visit["date"], "%Y-%m-%d"
+                            ).date(),
+                            key=f"edit_mv_date_{real_idx}",
+                        )
+                    with edit_mv_cols[1]:
+                        edited_mv_time = st.time_input(
+                            "Time",
+                            value=datetime.strptime(
+                                visit["time"], "%H:%M"
+                            ).time(),
+                            key=f"edit_mv_time_{real_idx}",
+                        )
+                    with edit_mv_cols[2]:
+                        edited_mv_doctor = st.text_input(
+                            "Doctor",
+                            value=visit["doctor"],
+                            key=f"edit_mv_doctor_{real_idx}",
+                        )
+
+                    edited_mv_notes = st.text_area(
+                        "Notes (Markdown supported)",
+                        value=visit.get("notes", ""),
+                        height=120,
+                        key=f"edit_mv_notes_{real_idx}",
+                    )
+
+                    col_save, col_cancel = st.columns(2)
+                    with col_save:
+                        if st.button(
+                            "Save Changes",
+                            key=f"save_mv_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.medical_visits[real_idx] = {
+                                "date": edited_mv_date.strftime("%Y-%m-%d"),
+                                "time": edited_mv_time.strftime("%H:%M"),
+                                "doctor": edited_mv_doctor.strip(),
+                                "notes": edited_mv_notes.strip(),
+                            }
+                            save_user_data(username)
+                            st.session_state.editing_visit = None
+                            logger.info("Medical visit updated")
+                            st.rerun()
+                    with col_cancel:
+                        if st.button(
+                            "Cancel",
+                            key=f"cancel_mv_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.editing_visit = None
+                            st.rerun()
+                else:
+                    col_date, col_doctor, col_del = st.columns(
+                        [2, 3, 1]
+                    )
+
+                    with col_date:
+                        parsed_date = datetime.strptime(
+                            visit["date"], "%Y-%m-%d"
+                        )
+                        display_date = (
+                            f"{parsed_date.strftime('%B')} "
+                            f"{parsed_date.day}, "
+                            f"{parsed_date.year}"
+                        )
+                        st.markdown(
+                            f"**{display_date}**  \n"
+                            f"{visit.get('time', '')}"
+                        )
+                    with col_doctor:
+                        st.markdown(f"**Dr.** {visit['doctor']}")
+                    with col_del:
+                        st.markdown("")
+
+                    if visit.get("notes"):
+                        st.markdown("---")
+                        st.markdown(visit["notes"])
+
+                    col_edit, col_delete = st.columns(2)
+                    with col_edit:
+                        if st.button(
+                            "Edit",
+                            key=f"edit_mv_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.editing_visit = real_idx
+                            st.rerun()
+                    with col_delete:
+                        if st.button(
+                            "Delete",
+                            key=f"del_mv_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.medical_visits.pop(real_idx)
+                            save_user_data(username)
+                            logger.info("Medical visit deleted")
+                            st.rerun()
+    else:
+        st.info(
+            "No visits yet. Start tracking your medical appointments!"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5: VACCINATION
+# ─────────────────────────────────────────────────────────────────────────────
+with tab5:
+    st.markdown("### Vaccination")
+    st.caption("Record and track your vaccinations")
+
+    # ── Entry Form ───────────────────────────────────────────────────────
+    vax_key = st.session_state.vax_form_key
+    vax_cols = st.columns([1, 2])
+
+    with vax_cols[0]:
+        vax_date = st.date_input("Date", key=f"vax_date_{vax_key}")
+    with vax_cols[1]:
+        vax_name = st.text_input(
+            "Name of Vaccination", key=f"vax_name_{vax_key}",
+        )
+
+    vax_notes = st.text_area(
+        "Notes (Markdown supported)",
+        key=f"vax_notes_{vax_key}",
+        height=120,
+    )
+
+    col_save, col_cancel = st.columns(2)
+    with col_save:
+        if st.button("Save Vaccination", use_container_width=True):
+            if not vax_name.strip():
+                st.warning("Please enter the name of the vaccination.")
+            else:
+                vaccination: dict[str, Any] = {
+                    "date": vax_date.strftime("%Y-%m-%d"),
+                    "name": vax_name.strip(),
+                    "notes": vax_notes.strip(),
+                }
+                st.session_state.vaccinations.append(vaccination)
+                save_user_data(username)
+                st.session_state.vax_form_key += 1
+                logger.info("Vaccination saved: %s", vaccination)
+                st.rerun()
+    with col_cancel:
+        if st.button(
+            "Cancel", key="vax_cancel", use_container_width=True,
+        ):
+            st.session_state.vax_form_key += 1
+            st.rerun()
+
+    # ── Records ──────────────────────────────────────────────────────────
+    if st.session_state.vaccinations:
+        st.markdown("---")
+        st.markdown("#### Records")
+
+        for idx, vax in enumerate(
+            reversed(st.session_state.vaccinations)
+        ):
+            real_idx: int = (
+                len(st.session_state.vaccinations) - 1 - idx
+            )
+            is_editing_vax: bool = (
+                st.session_state.editing_vaccination == real_idx
+            )
+
+            with st.container(border=True):
+                if is_editing_vax:
+                    st.markdown("**Editing Vaccination**")
+
+                    edit_vax_cols = st.columns([1, 2])
+                    with edit_vax_cols[0]:
+                        edited_vax_date = st.date_input(
+                            "Date",
+                            value=datetime.strptime(
+                                vax["date"], "%Y-%m-%d"
+                            ).date(),
+                            key=f"edit_vax_date_{real_idx}",
+                        )
+                    with edit_vax_cols[1]:
+                        edited_vax_name = st.text_input(
+                            "Name of Vaccination",
+                            value=vax["name"],
+                            key=f"edit_vax_name_{real_idx}",
+                        )
+
+                    edited_vax_notes = st.text_area(
+                        "Notes (Markdown supported)",
+                        value=vax.get("notes", ""),
+                        height=120,
+                        key=f"edit_vax_notes_{real_idx}",
+                    )
+
+                    col_save_edit, col_cancel_edit = st.columns(2)
+                    with col_save_edit:
+                        if st.button(
+                            "Save Changes",
+                            key=f"save_vax_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.vaccinations[real_idx] = {
+                                "date": edited_vax_date.strftime("%Y-%m-%d"),
+                                "name": edited_vax_name.strip(),
+                                "notes": edited_vax_notes.strip(),
+                            }
+                            save_user_data(username)
+                            st.session_state.editing_vaccination = None
+                            logger.info("Vaccination updated")
+                            st.rerun()
+                    with col_cancel_edit:
+                        if st.button(
+                            "Cancel",
+                            key=f"cancel_vax_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.editing_vaccination = None
+                            st.rerun()
+                else:
+                    col_date, col_name, col_del = st.columns(
+                        [2, 3, 1]
+                    )
+
+                    with col_date:
+                        parsed_date = datetime.strptime(
+                            vax["date"], "%Y-%m-%d"
+                        )
+                        display_date = (
+                            f"{parsed_date.strftime('%B')} "
+                            f"{parsed_date.day}, "
+                            f"{parsed_date.year}"
+                        )
+                        st.markdown(f"**{display_date}**")
+                    with col_name:
+                        st.markdown(f"**{vax['name']}**")
+                    with col_del:
+                        st.markdown("")
+
+                    if vax.get("notes"):
+                        st.markdown("---")
+                        st.markdown(vax["notes"])
+
+                    col_edit, col_delete = st.columns(2)
+                    with col_edit:
+                        if st.button(
+                            "Edit",
+                            key=f"edit_vax_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.editing_vaccination = real_idx
+                            st.rerun()
+                    with col_delete:
+                        if st.button(
+                            "Delete",
+                            key=f"del_vax_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.vaccinations.pop(real_idx)
+                            save_user_data(username)
+                            logger.info("Vaccination deleted")
+                            st.rerun()
+    else:
+        st.info(
+            "No vaccinations yet. Start tracking your vaccinations!"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 6: PRESCRIPTION
+# ─────────────────────────────────────────────────────────────────────────────
+with tab6:
+    st.markdown("### Prescription")
+    st.caption("Record and track your prescriptions")
+
+    # ── Entry Form ───────────────────────────────────────────────────────
+    rx_key = st.session_state.rx_form_key
+    drug_key = st.session_state.rx_drug_key
+
+    rx_date = st.date_input("Date", key=f"rx_date_{rx_key}")
+
+    # ── Drug / Dose builder ──────────────────────────────────────────────
+    st.markdown("**Drugs & Doses**")
+
+    # Display already-added drugs
+    for d_idx, drug_entry in enumerate(
+        st.session_state.pending_rx_drugs
+    ):
+        is_editing_drug: bool = (
+            st.session_state.editing_rx_drug
+            == f"pending_{d_idx}"
+        )
+        with st.container(border=True):
+            if is_editing_drug:
+                ed_cols = st.columns([2, 2, 1, 1])
+                with ed_cols[0]:
+                    edited_drug = st.text_input(
+                        "Drug",
+                        value=drug_entry["drug"],
+                        key=f"pedit_drug_{d_idx}_{rx_key}",
+                        label_visibility="collapsed",
+                    )
+                with ed_cols[1]:
+                    edited_dose = st.text_input(
+                        "Dose",
+                        value=drug_entry["dose"],
+                        key=f"pedit_dose_{d_idx}_{rx_key}",
+                        label_visibility="collapsed",
+                    )
+                with ed_cols[2]:
+                    if st.button(
+                        "Save",
+                        key=f"pedit_save_{d_idx}_{rx_key}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.pending_rx_drugs[d_idx] = {
+                            "drug": edited_drug.strip(),
+                            "dose": edited_dose.strip(),
+                        }
+                        st.session_state.editing_rx_drug = None
+                        st.rerun()
+                with ed_cols[3]:
+                    if st.button(
+                        "Cancel",
+                        key=f"pedit_cancel_{d_idx}_{rx_key}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.editing_rx_drug = None
+                        st.rerun()
+            else:
+                d_col_drug, d_col_sep, d_col_dose, d_col_edit, d_col_trash = (
+                    st.columns([2, 0.15, 2, 0.5, 0.5])
+                )
+                with d_col_drug:
+                    st.markdown(f"**{drug_entry['drug']}**")
+                with d_col_sep:
+                    st.markdown(
+                        "<div style='border-left: 2px solid #ccc;"
+                        " height: 100%; min-height: 30px;'></div>",
+                        unsafe_allow_html=True,
+                    )
+                with d_col_dose:
+                    st.markdown(drug_entry["dose"])
+                with d_col_edit:
+                    if st.button(
+                        "\u270F\uFE0F",
+                        key=f"pen_rx_{d_idx}_{rx_key}",
+                    ):
+                        st.session_state.editing_rx_drug = (
+                            f"pending_{d_idx}"
+                        )
+                        st.rerun()
+                with d_col_trash:
+                    if st.button(
+                        "\U0001f5d1\uFE0F",
+                        key=f"trash_rx_{d_idx}_{rx_key}",
+                    ):
+                        st.session_state.pending_rx_drugs.pop(d_idx)
+                        st.rerun()
+
+    # Input row for new drug/dose
+    add_cols = st.columns([2, 2, 1])
+    with add_cols[0]:
+        new_drug = st.text_input(
+            "Drug", key=f"rx_drug_{drug_key}", label_visibility="collapsed",
+            placeholder="Drug name",
+        )
+    with add_cols[1]:
+        new_dose = st.text_input(
+            "Dose", key=f"rx_dose_{drug_key}", label_visibility="collapsed",
+            placeholder="Dose",
+        )
+    with add_cols[2]:
+        if st.button("Add", key=f"rx_add_{drug_key}",
+                      use_container_width=True):
+            if new_drug.strip() and new_dose.strip():
+                st.session_state.pending_rx_drugs.append({
+                    "drug": new_drug.strip(),
+                    "dose": new_dose.strip(),
+                })
+                st.session_state.rx_drug_key += 1
+                st.rerun()
+            else:
+                st.warning("Please enter both drug and dose.")
+
+    rx_doctor = st.text_input("Doctor", key=f"rx_doctor_{rx_key}")
+
+    rx_notes = st.text_area(
+        "Notes (Markdown supported)",
+        key=f"rx_notes_{rx_key}",
+        height=120,
+    )
+
+    col_save, col_cancel = st.columns(2)
+    with col_save:
+        if st.button("Save Prescription", use_container_width=True):
+            if not st.session_state.pending_rx_drugs:
+                st.warning("Please add at least one drug and dose.")
+            elif not rx_doctor.strip():
+                st.warning("Please enter a doctor name.")
+            else:
+                prescription: dict[str, Any] = {
+                    "date": rx_date.strftime("%Y-%m-%d"),
+                    "drugs": list(st.session_state.pending_rx_drugs),
+                    "doctor": rx_doctor.strip(),
+                    "notes": rx_notes.strip(),
+                }
+                st.session_state.prescriptions.append(prescription)
+                st.session_state.pending_rx_drugs = []
+                save_user_data(username)
+                st.session_state.rx_form_key += 1
+                st.session_state.rx_drug_key += 1
+                logger.info("Prescription saved: %s", prescription)
+                st.rerun()
+    with col_cancel:
+        if st.button(
+            "Cancel", key="rx_cancel", use_container_width=True,
+        ):
+            st.session_state.pending_rx_drugs = []
+            st.session_state.rx_form_key += 1
+            st.session_state.rx_drug_key += 1
+            st.rerun()
+
+    # ── Records ──────────────────────────────────────────────────────────
+    if st.session_state.prescriptions:
+        st.markdown("---")
+        st.markdown("#### Records")
+
+        for idx, rx in enumerate(
+            reversed(st.session_state.prescriptions)
+        ):
+            real_idx: int = (
+                len(st.session_state.prescriptions) - 1 - idx
+            )
+            is_editing_rx: bool = (
+                st.session_state.editing_prescription == real_idx
+            )
+
+            with st.container(border=True):
+                if is_editing_rx:
+                    st.markdown("**Editing Prescription**")
+
+                    edited_rx_date = st.date_input(
+                        "Date",
+                        value=datetime.strptime(
+                            rx["date"], "%Y-%m-%d"
+                        ).date(),
+                        key=f"edit_rx_date_{real_idx}",
+                    )
+
+                    # Editable drug list stored in session state
+                    edit_drugs_key = f"edit_rx_drugs_{real_idx}"
+                    if edit_drugs_key not in st.session_state:
+                        st.session_state[edit_drugs_key] = list(
+                            rx.get("drugs", [])
+                        )
+
+                    st.markdown("**Drugs & Doses**")
+                    for d_idx, drug_entry in enumerate(
+                        st.session_state[edit_drugs_key]
+                    ):
+                        is_editing_ed: bool = (
+                            st.session_state.editing_rx_drug
+                            == f"erx_{real_idx}_{d_idx}"
+                        )
+                        with st.container(border=True):
+                            if is_editing_ed:
+                                ed_cols = st.columns([2, 2, 1, 1])
+                                with ed_cols[0]:
+                                    eed_drug = st.text_input(
+                                        "Drug",
+                                        value=drug_entry["drug"],
+                                        key=f"eed_drug_{real_idx}_{d_idx}",
+                                        label_visibility="collapsed",
+                                    )
+                                with ed_cols[1]:
+                                    eed_dose = st.text_input(
+                                        "Dose",
+                                        value=drug_entry["dose"],
+                                        key=f"eed_dose_{real_idx}_{d_idx}",
+                                        label_visibility="collapsed",
+                                    )
+                                with ed_cols[2]:
+                                    if st.button(
+                                        "Save",
+                                        key=f"eed_save_{real_idx}_{d_idx}",
+                                        use_container_width=True,
+                                    ):
+                                        st.session_state[
+                                            edit_drugs_key
+                                        ][d_idx] = {
+                                            "drug": eed_drug.strip(),
+                                            "dose": eed_dose.strip(),
+                                        }
+                                        st.session_state.editing_rx_drug = (
+                                            None
+                                        )
+                                        st.rerun()
+                                with ed_cols[3]:
+                                    if st.button(
+                                        "Cancel",
+                                        key=f"eed_cancel_{real_idx}_{d_idx}",
+                                        use_container_width=True,
+                                    ):
+                                        st.session_state.editing_rx_drug = (
+                                            None
+                                        )
+                                        st.rerun()
+                            else:
+                                d_col_drug, d_col_sep, d_col_dose, d_col_edit, d_col_trash = (
+                                    st.columns([2, 0.15, 2, 0.5, 0.5])
+                                )
+                                with d_col_drug:
+                                    st.markdown(
+                                        f"**{drug_entry['drug']}**"
+                                    )
+                                with d_col_sep:
+                                    st.markdown(
+                                        "<div style='border-left: 2px solid"
+                                        " #ccc; height: 100%;"
+                                        " min-height: 30px;'></div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with d_col_dose:
+                                    st.markdown(drug_entry["dose"])
+                                with d_col_edit:
+                                    if st.button(
+                                        "\u270F\uFE0F",
+                                        key=f"epen_rx_{real_idx}_{d_idx}",
+                                    ):
+                                        st.session_state.editing_rx_drug = (
+                                            f"erx_{real_idx}_{d_idx}"
+                                        )
+                                        st.rerun()
+                                with d_col_trash:
+                                    if st.button(
+                                        "\U0001f5d1\uFE0F",
+                                        key=f"etrash_rx_{real_idx}_{d_idx}",
+                                    ):
+                                        st.session_state[
+                                            edit_drugs_key
+                                        ].pop(d_idx)
+                                        st.rerun()
+
+                    edit_add_cols = st.columns([2, 2, 1])
+                    with edit_add_cols[0]:
+                        edit_new_drug = st.text_input(
+                            "Drug",
+                            key=f"edit_rx_newdrug_{real_idx}",
+                            label_visibility="collapsed",
+                            placeholder="Drug name",
+                        )
+                    with edit_add_cols[1]:
+                        edit_new_dose = st.text_input(
+                            "Dose",
+                            key=f"edit_rx_newdose_{real_idx}",
+                            label_visibility="collapsed",
+                            placeholder="Dose",
+                        )
+                    with edit_add_cols[2]:
+                        if st.button(
+                            "Add",
+                            key=f"edit_rx_add_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            if (
+                                edit_new_drug.strip()
+                                and edit_new_dose.strip()
+                            ):
+                                st.session_state[edit_drugs_key].append({
+                                    "drug": edit_new_drug.strip(),
+                                    "dose": edit_new_dose.strip(),
+                                })
+                                st.rerun()
+
+                    edited_rx_doctor = st.text_input(
+                        "Doctor",
+                        value=rx["doctor"],
+                        key=f"edit_rx_doctor_{real_idx}",
+                    )
+
+                    edited_rx_notes = st.text_area(
+                        "Notes (Markdown supported)",
+                        value=rx.get("notes", ""),
+                        height=120,
+                        key=f"edit_rx_notes_{real_idx}",
+                    )
+
+                    col_save_edit, col_cancel_edit = st.columns(2)
+                    with col_save_edit:
+                        if st.button(
+                            "Save Changes",
+                            key=f"save_rx_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.prescriptions[real_idx] = {
+                                "date": edited_rx_date.strftime("%Y-%m-%d"),
+                                "drugs": list(
+                                    st.session_state[edit_drugs_key]
+                                ),
+                                "doctor": edited_rx_doctor.strip(),
+                                "notes": edited_rx_notes.strip(),
+                            }
+                            del st.session_state[edit_drugs_key]
+                            save_user_data(username)
+                            st.session_state.editing_prescription = None
+                            logger.info("Prescription updated")
+                            st.rerun()
+                    with col_cancel_edit:
+                        if st.button(
+                            "Cancel",
+                            key=f"cancel_rx_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            if edit_drugs_key in st.session_state:
+                                del st.session_state[edit_drugs_key]
+                            st.session_state.editing_prescription = None
+                            st.rerun()
+                else:
+                    col_date, col_doctor, col_spacer = st.columns(
+                        [2, 3, 1]
+                    )
+
+                    with col_date:
+                        parsed_date = datetime.strptime(
+                            rx["date"], "%Y-%m-%d"
+                        )
+                        display_date = (
+                            f"{parsed_date.strftime('%B')} "
+                            f"{parsed_date.day}, "
+                            f"{parsed_date.year}"
+                        )
+                        st.markdown(f"**{display_date}**")
+                    with col_doctor:
+                        st.markdown(f"**Dr.** {rx['doctor']}")
+
+                    # Drug list
+                    for drug_entry in rx.get("drugs", []):
+                        with st.container(border=True):
+                            d_col_drug, d_col_sep, d_col_dose = st.columns(
+                                [2, 0.15, 2]
+                            )
+                            with d_col_drug:
+                                st.markdown(
+                                    f"**{drug_entry['drug']}**"
+                                )
+                            with d_col_sep:
+                                st.markdown(
+                                    "<div style='border-left: 2px solid"
+                                    " #ccc; height: 100%;"
+                                    " min-height: 30px;'></div>",
+                                    unsafe_allow_html=True,
+                                )
+                            with d_col_dose:
+                                st.markdown(drug_entry["dose"])
+
+                    if rx.get("notes"):
+                        st.markdown("---")
+                        st.markdown(rx["notes"])
+
+                    col_edit, col_delete = st.columns(2)
+                    with col_edit:
+                        if st.button(
+                            "Edit",
+                            key=f"edit_rx_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.editing_prescription = (
+                                real_idx
+                            )
+                            st.rerun()
+                    with col_delete:
+                        if st.button(
+                            "Delete",
+                            key=f"del_rx_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.prescriptions.pop(real_idx)
+                            save_user_data(username)
+                            logger.info("Prescription deleted")
+                            st.rerun()
+    else:
+        st.info(
+            "No prescriptions yet. Start tracking your prescriptions!"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 7: LAB TEST
+# ─────────────────────────────────────────────────────────────────────────────
+with tab7:
+    st.markdown("### Lab Test")
+    st.caption("Record and track your lab test results")
+
+    # ── Entry Form ───────────────────────────────────────────────────────
+    lab_key = st.session_state.lab_form_key
+    item_key = st.session_state.lab_item_key
+
+    lab_date = st.date_input("Date", key=f"lab_date_{lab_key}")
+
+    # ── Test / Result / Normal builder ───────────────────────────────────
+    st.markdown("**Type**")
+
+    # Display already-added test items
+    for t_idx, test_item in enumerate(
+        st.session_state.pending_lab_items
+    ):
+        is_editing_item: bool = (
+            st.session_state.editing_lab_item
+            == f"pending_{t_idx}"
+        )
+        with st.container(border=True):
+            if is_editing_item:
+                ei_cols = st.columns([2, 2, 2, 1, 1])
+                with ei_cols[0]:
+                    edited_test = st.text_input(
+                        "Test",
+                        value=test_item["test"],
+                        key=f"ledit_test_{t_idx}_{lab_key}",
+                        label_visibility="collapsed",
+                    )
+                with ei_cols[1]:
+                    edited_result = st.text_input(
+                        "Result",
+                        value=test_item["result"],
+                        key=f"ledit_result_{t_idx}_{lab_key}",
+                        label_visibility="collapsed",
+                    )
+                with ei_cols[2]:
+                    edited_normal = st.text_input(
+                        "Normal",
+                        value=test_item["normal"],
+                        key=f"ledit_normal_{t_idx}_{lab_key}",
+                        label_visibility="collapsed",
+                    )
+                with ei_cols[3]:
+                    if st.button(
+                        "Save",
+                        key=f"ledit_save_{t_idx}_{lab_key}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.pending_lab_items[t_idx] = {
+                            "test": edited_test.strip(),
+                            "result": edited_result.strip(),
+                            "normal": edited_normal.strip(),
+                        }
+                        st.session_state.editing_lab_item = None
+                        st.rerun()
+                with ei_cols[4]:
+                    if st.button(
+                        "Cancel",
+                        key=f"ledit_cancel_{t_idx}_{lab_key}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.editing_lab_item = None
+                        st.rerun()
+            else:
+                t_col_test, t_col_sep1, t_col_result, t_col_sep2, t_col_normal, t_col_edit, t_col_trash = (
+                    st.columns([2, 0.15, 2, 0.15, 2, 0.5, 0.5])
+                )
+                with t_col_test:
+                    st.markdown(f"**{test_item['test']}**")
+                with t_col_sep1:
+                    st.markdown(
+                        "<div style='border-left: 2px solid #ccc;"
+                        " height: 100%; min-height: 30px;'></div>",
+                        unsafe_allow_html=True,
+                    )
+                with t_col_result:
+                    st.markdown(test_item["result"])
+                with t_col_sep2:
+                    st.markdown(
+                        "<div style='border-left: 2px solid #ccc;"
+                        " height: 100%; min-height: 30px;'></div>",
+                        unsafe_allow_html=True,
+                    )
+                with t_col_normal:
+                    st.markdown(test_item["normal"])
+                with t_col_edit:
+                    if st.button(
+                        "\u270F\uFE0F",
+                        key=f"pen_lab_{t_idx}_{lab_key}",
+                    ):
+                        st.session_state.editing_lab_item = (
+                            f"pending_{t_idx}"
+                        )
+                        st.rerun()
+                with t_col_trash:
+                    if st.button(
+                        "\U0001f5d1\uFE0F",
+                        key=f"trash_lab_{t_idx}_{lab_key}",
+                    ):
+                        st.session_state.pending_lab_items.pop(t_idx)
+                        st.rerun()
+
+    # Input row for new test item
+    add_cols = st.columns([2, 2, 2, 1])
+    with add_cols[0]:
+        new_test = st.text_input(
+            "Test", key=f"lab_test_{item_key}",
+            label_visibility="collapsed", placeholder="Test",
+        )
+    with add_cols[1]:
+        new_result = st.text_input(
+            "Result", key=f"lab_result_{item_key}",
+            label_visibility="collapsed", placeholder="Result",
+        )
+    with add_cols[2]:
+        new_normal = st.text_input(
+            "Normal", key=f"lab_normal_{item_key}",
+            label_visibility="collapsed", placeholder="Normal",
+        )
+    with add_cols[3]:
+        if st.button("Add", key=f"lab_add_{item_key}",
+                      use_container_width=True):
+            if (
+                new_test.strip()
+                and new_result.strip()
+                and new_normal.strip()
+            ):
+                st.session_state.pending_lab_items.append({
+                    "test": new_test.strip(),
+                    "result": new_result.strip(),
+                    "normal": new_normal.strip(),
+                })
+                st.session_state.lab_item_key += 1
+                st.rerun()
+            else:
+                st.warning("Please enter test, result, and normal range.")
+
+    lab_doctor = st.text_input("Doctor", key=f"lab_doctor_{lab_key}")
+
+    lab_notes = st.text_area(
+        "Notes (Markdown supported)",
+        key=f"lab_notes_{lab_key}",
+        height=120,
+    )
+
+    lab_uploaded_file = st.file_uploader(
+        "Attach PDF (optional)",
+        type=["pdf"],
+        key=f"lab_file_{st.session_state.lab_file_key}",
+    )
+
+    col_save, col_cancel = st.columns(2)
+    with col_save:
+        if st.button("Save Lab Test", use_container_width=True):
+            if not st.session_state.pending_lab_items:
+                st.warning("Please add at least one test result.")
+            elif not lab_doctor.strip():
+                st.warning("Please enter a doctor name.")
+            else:
+                lab_test: dict[str, Any] = {
+                    "date": lab_date.strftime("%Y-%m-%d"),
+                    "tests": list(st.session_state.pending_lab_items),
+                    "doctor": lab_doctor.strip(),
+                    "notes": lab_notes.strip(),
+                }
+
+                if lab_uploaded_file is not None:
+                    lab_attach_dir: str = (
+                        f"lab_attachments/{username}"
+                    )
+                    os.makedirs(lab_attach_dir, exist_ok=True)
+                    lab_timestamp: str = datetime.now().strftime(
+                        "%Y%m%d_%H%M%S"
+                    )
+                    lab_safe_name: str = (
+                        f"{lab_timestamp}_{lab_uploaded_file.name}"
+                    )
+                    lab_file_path: str = os.path.join(
+                        lab_attach_dir, lab_safe_name
+                    )
+                    with open(lab_file_path, "wb") as f:
+                        f.write(lab_uploaded_file.getbuffer())
+                    lab_test["attachment"] = {
+                        "filename": lab_uploaded_file.name,
+                        "filepath": lab_file_path,
+                    }
+                    logger.info(
+                        "Lab attachment saved: %s", lab_file_path,
+                    )
+
+                st.session_state.lab_tests.append(lab_test)
+                st.session_state.pending_lab_items = []
+                save_user_data(username)
+                st.session_state.lab_form_key += 1
+                st.session_state.lab_item_key += 1
+                st.session_state.lab_file_key += 1
+                logger.info("Lab test saved: %s", lab_test)
+                st.rerun()
+    with col_cancel:
+        if st.button(
+            "Cancel", key="lab_cancel", use_container_width=True,
+        ):
+            st.session_state.pending_lab_items = []
+            st.session_state.lab_form_key += 1
+            st.session_state.lab_item_key += 1
+            st.session_state.lab_file_key += 1
+            st.rerun()
+
+    # ── Records ──────────────────────────────────────────────────────────
+    if st.session_state.lab_tests:
+        st.markdown("---")
+        st.markdown("#### Records")
+
+        for idx, lt in enumerate(
+            reversed(st.session_state.lab_tests)
+        ):
+            real_idx: int = (
+                len(st.session_state.lab_tests) - 1 - idx
+            )
+            is_editing_lt: bool = (
+                st.session_state.editing_lab_test == real_idx
+            )
+
+            with st.container(border=True):
+                if is_editing_lt:
+                    st.markdown("**Editing Lab Test**")
+
+                    edited_lab_date = st.date_input(
+                        "Date",
+                        value=datetime.strptime(
+                            lt["date"], "%Y-%m-%d"
+                        ).date(),
+                        key=f"edit_lab_date_{real_idx}",
+                    )
+
+                    # Editable test list stored in session state
+                    edit_tests_key = f"edit_lab_tests_{real_idx}"
+                    if edit_tests_key not in st.session_state:
+                        st.session_state[edit_tests_key] = list(
+                            lt.get("tests", [])
+                        )
+
+                    st.markdown("**Type**")
+                    for t_idx, test_item in enumerate(
+                        st.session_state[edit_tests_key]
+                    ):
+                        is_editing_ei: bool = (
+                            st.session_state.editing_lab_item
+                            == f"elt_{real_idx}_{t_idx}"
+                        )
+                        with st.container(border=True):
+                            if is_editing_ei:
+                                ei_cols = st.columns([2, 2, 2, 1, 1])
+                                with ei_cols[0]:
+                                    eet_test = st.text_input(
+                                        "Test",
+                                        value=test_item["test"],
+                                        key=f"eet_test_{real_idx}_{t_idx}",
+                                        label_visibility="collapsed",
+                                    )
+                                with ei_cols[1]:
+                                    eet_result = st.text_input(
+                                        "Result",
+                                        value=test_item["result"],
+                                        key=f"eet_result_{real_idx}_{t_idx}",
+                                        label_visibility="collapsed",
+                                    )
+                                with ei_cols[2]:
+                                    eet_normal = st.text_input(
+                                        "Normal",
+                                        value=test_item["normal"],
+                                        key=f"eet_normal_{real_idx}_{t_idx}",
+                                        label_visibility="collapsed",
+                                    )
+                                with ei_cols[3]:
+                                    if st.button(
+                                        "Save",
+                                        key=f"eet_save_{real_idx}_{t_idx}",
+                                        use_container_width=True,
+                                    ):
+                                        st.session_state[
+                                            edit_tests_key
+                                        ][t_idx] = {
+                                            "test": eet_test.strip(),
+                                            "result": eet_result.strip(),
+                                            "normal": eet_normal.strip(),
+                                        }
+                                        st.session_state.editing_lab_item = (
+                                            None
+                                        )
+                                        st.rerun()
+                                with ei_cols[4]:
+                                    if st.button(
+                                        "Cancel",
+                                        key=f"eet_cancel_{real_idx}_{t_idx}",
+                                        use_container_width=True,
+                                    ):
+                                        st.session_state.editing_lab_item = (
+                                            None
+                                        )
+                                        st.rerun()
+                            else:
+                                t_col_test, t_col_sep1, t_col_result, t_col_sep2, t_col_normal, t_col_edit, t_col_trash = (
+                                    st.columns([2, 0.15, 2, 0.15, 2, 0.5, 0.5])
+                                )
+                                with t_col_test:
+                                    st.markdown(
+                                        f"**{test_item['test']}**"
+                                    )
+                                with t_col_sep1:
+                                    st.markdown(
+                                        "<div style='border-left: 2px solid"
+                                        " #ccc; height: 100%;"
+                                        " min-height: 30px;'></div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with t_col_result:
+                                    st.markdown(test_item["result"])
+                                with t_col_sep2:
+                                    st.markdown(
+                                        "<div style='border-left: 2px solid"
+                                        " #ccc; height: 100%;"
+                                        " min-height: 30px;'></div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with t_col_normal:
+                                    st.markdown(test_item["normal"])
+                                with t_col_edit:
+                                    if st.button(
+                                        "\u270F\uFE0F",
+                                        key=f"epen_lab_{real_idx}_{t_idx}",
+                                    ):
+                                        st.session_state.editing_lab_item = (
+                                            f"elt_{real_idx}_{t_idx}"
+                                        )
+                                        st.rerun()
+                                with t_col_trash:
+                                    if st.button(
+                                        "\U0001f5d1\uFE0F",
+                                        key=f"etrash_lab_{real_idx}_{t_idx}",
+                                    ):
+                                        st.session_state[
+                                            edit_tests_key
+                                        ].pop(t_idx)
+                                        st.rerun()
+
+                    edit_add_cols = st.columns([2, 2, 2, 1])
+                    with edit_add_cols[0]:
+                        edit_new_test = st.text_input(
+                            "Test",
+                            key=f"edit_lab_newtest_{real_idx}",
+                            label_visibility="collapsed",
+                            placeholder="Test",
+                        )
+                    with edit_add_cols[1]:
+                        edit_new_result = st.text_input(
+                            "Result",
+                            key=f"edit_lab_newresult_{real_idx}",
+                            label_visibility="collapsed",
+                            placeholder="Result",
+                        )
+                    with edit_add_cols[2]:
+                        edit_new_normal = st.text_input(
+                            "Normal",
+                            key=f"edit_lab_newnormal_{real_idx}",
+                            label_visibility="collapsed",
+                            placeholder="Normal",
+                        )
+                    with edit_add_cols[3]:
+                        if st.button(
+                            "Add",
+                            key=f"edit_lab_add_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            if (
+                                edit_new_test.strip()
+                                and edit_new_result.strip()
+                                and edit_new_normal.strip()
+                            ):
+                                st.session_state[edit_tests_key].append({
+                                    "test": edit_new_test.strip(),
+                                    "result": edit_new_result.strip(),
+                                    "normal": edit_new_normal.strip(),
+                                })
+                                st.rerun()
+
+                    edited_lab_doctor = st.text_input(
+                        "Doctor",
+                        value=lt["doctor"],
+                        key=f"edit_lab_doctor_{real_idx}",
+                    )
+
+                    edited_lab_notes = st.text_area(
+                        "Notes (Markdown supported)",
+                        value=lt.get("notes", ""),
+                        height=120,
+                        key=f"edit_lab_notes_{real_idx}",
+                    )
+
+                    if lt.get("attachment"):
+                        st.caption(
+                            f"Current attachment: "
+                            f"{lt['attachment']['filename']}"
+                        )
+                    edit_lab_file = st.file_uploader(
+                        "Replace PDF (optional)",
+                        type=["pdf"],
+                        key=f"edit_lab_file_{real_idx}",
+                    )
+
+                    col_save_edit, col_cancel_edit = st.columns(2)
+                    with col_save_edit:
+                        if st.button(
+                            "Save Changes",
+                            key=f"save_lab_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            updated_lab: dict[str, Any] = {
+                                "date": edited_lab_date.strftime("%Y-%m-%d"),
+                                "tests": list(
+                                    st.session_state[edit_tests_key]
+                                ),
+                                "doctor": edited_lab_doctor.strip(),
+                                "notes": edited_lab_notes.strip(),
+                            }
+
+                            if edit_lab_file is not None:
+                                lab_attach_dir = (
+                                    f"lab_attachments/{username}"
+                                )
+                                os.makedirs(lab_attach_dir, exist_ok=True)
+                                lab_ts: str = datetime.now().strftime(
+                                    "%Y%m%d_%H%M%S"
+                                )
+                                lab_sname: str = (
+                                    f"{lab_ts}_{edit_lab_file.name}"
+                                )
+                                lab_fpath: str = os.path.join(
+                                    lab_attach_dir, lab_sname
+                                )
+                                with open(lab_fpath, "wb") as f:
+                                    f.write(edit_lab_file.getbuffer())
+                                updated_lab["attachment"] = {
+                                    "filename": edit_lab_file.name,
+                                    "filepath": lab_fpath,
+                                }
+                                logger.info(
+                                    "Lab attachment updated: %s",
+                                    lab_fpath,
+                                )
+                            elif lt.get("attachment"):
+                                updated_lab["attachment"] = lt["attachment"]
+
+                            st.session_state.lab_tests[real_idx] = (
+                                updated_lab
+                            )
+                            del st.session_state[edit_tests_key]
+                            save_user_data(username)
+                            st.session_state.editing_lab_test = None
+                            logger.info("Lab test updated")
+                            st.rerun()
+                    with col_cancel_edit:
+                        if st.button(
+                            "Cancel",
+                            key=f"cancel_lab_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            if edit_tests_key in st.session_state:
+                                del st.session_state[edit_tests_key]
+                            st.session_state.editing_lab_test = None
+                            st.rerun()
+                else:
+                    col_date, col_doctor, col_spacer = st.columns(
+                        [2, 3, 1]
+                    )
+
+                    with col_date:
+                        parsed_date = datetime.strptime(
+                            lt["date"], "%Y-%m-%d"
+                        )
+                        display_date = (
+                            f"{parsed_date.strftime('%B')} "
+                            f"{parsed_date.day}, "
+                            f"{parsed_date.year}"
+                        )
+                        st.markdown(f"**{display_date}**")
+                    with col_doctor:
+                        st.markdown(f"**Dr.** {lt['doctor']}")
+
+                    # Test list
+                    for test_item in lt.get("tests", []):
+                        with st.container(border=True):
+                            t_col_test, t_col_sep1, t_col_result, t_col_sep2, t_col_normal = (
+                                st.columns([2, 0.15, 2, 0.15, 2])
+                            )
+                            with t_col_test:
+                                st.markdown(
+                                    f"**{test_item['test']}**"
+                                )
+                            with t_col_sep1:
+                                st.markdown(
+                                    "<div style='border-left: 2px solid"
+                                    " #ccc; height: 100%;"
+                                    " min-height: 30px;'></div>",
+                                    unsafe_allow_html=True,
+                                )
+                            with t_col_result:
+                                st.markdown(test_item["result"])
+                            with t_col_sep2:
+                                st.markdown(
+                                    "<div style='border-left: 2px solid"
+                                    " #ccc; height: 100%;"
+                                    " min-height: 30px;'></div>",
+                                    unsafe_allow_html=True,
+                                )
+                            with t_col_normal:
+                                st.markdown(test_item["normal"])
+
+                    if lt.get("notes"):
+                        st.markdown("---")
+                        st.markdown(lt["notes"])
+
+                    if lt.get("attachment"):
+                        st.markdown("---")
+                        st.caption(
+                            f"📄 {lt['attachment']['filename']}"
+                        )
+                        with open(
+                            lt["attachment"]["filepath"], "rb"
+                        ) as f:
+                            st.download_button(
+                                label="Download PDF",
+                                data=f,
+                                file_name=lt["attachment"]["filename"],
+                                mime="application/pdf",
+                                key=f"dl_lab_{real_idx}",
+                            )
+
+                    col_edit, col_delete = st.columns(2)
+                    with col_edit:
+                        if st.button(
+                            "Edit",
+                            key=f"edit_lab_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.editing_lab_test = real_idx
+                            st.rerun()
+                    with col_delete:
+                        if st.button(
+                            "Delete",
+                            key=f"del_lab_{real_idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.lab_tests.pop(real_idx)
+                            save_user_data(username)
+                            logger.info("Lab test deleted")
+                            st.rerun()
+    else:
+        st.info(
+            "No lab tests yet. Start tracking your lab results!"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 8: HEALTH JOURNAL
+# ─────────────────────────────────────────────────────────────────────────────
+with tab8:
     st.markdown("### Health Journal")
     st.caption("Track your health journey with notes and attachments")
 

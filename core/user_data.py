@@ -54,7 +54,15 @@ def load_user_data(username: str) -> dict[str, Any]:
             "No data file for user '%s'; returning defaults",
             username,
         )
-        return {"reminders": [], "journal_entries": [], "bp_readings": []}
+        return {
+            "reminders": [],
+            "journal_entries": [],
+            "bp_readings": [],
+            "medical_visits": [],
+            "vaccinations": [],
+            "prescriptions": [],
+            "lab_tests": [],
+        }
 
     try:
         with open(filepath, "r") as data_file:
@@ -63,7 +71,15 @@ def load_user_data(username: str) -> dict[str, Any]:
         return data
     except (json.JSONDecodeError, OSError) as e:
         logger.error("Failed to load data for user '%s': %s", username, e)
-        return {"reminders": [], "journal_entries": [], "bp_readings": []}
+        return {
+            "reminders": [],
+            "journal_entries": [],
+            "bp_readings": [],
+            "medical_visits": [],
+            "vaccinations": [],
+            "prescriptions": [],
+            "lab_tests": [],
+        }
 
 
 def save_user_data(username: str) -> None:
@@ -71,7 +87,8 @@ def save_user_data(username: str) -> None:
 
     Reads ``st.session_state.reminders``,
     ``st.session_state.journal_entries``,
-    ``st.session_state.bp_readings``, and
+    ``st.session_state.bp_readings``,
+    ``st.session_state.medical_visits``, and
     ``st.session_state.chat_thread_counter`` and writes them to disk.
 
     Args:
@@ -82,6 +99,10 @@ def save_user_data(username: str) -> None:
         "reminders": st.session_state.reminders,
         "journal_entries": st.session_state.journal_entries,
         "bp_readings": st.session_state.bp_readings,
+        "medical_visits": st.session_state.medical_visits,
+        "vaccinations": st.session_state.vaccinations,
+        "prescriptions": st.session_state.prescriptions,
+        "lab_tests": st.session_state.lab_tests,
         "chat_thread_counter": st.session_state.get(
             "chat_thread_counter", 0
         ),
@@ -114,6 +135,10 @@ def init_session_state(username: str) -> None:
         st.session_state.reminders = user_data.get("reminders", [])
         st.session_state.journal_entries = user_data.get("journal_entries", [])
         st.session_state.bp_readings = user_data.get("bp_readings", [])
+        st.session_state.medical_visits = user_data.get("medical_visits", [])
+        st.session_state.vaccinations = user_data.get("vaccinations", [])
+        st.session_state.prescriptions = user_data.get("prescriptions", [])
+        st.session_state.lab_tests = user_data.get("lab_tests", [])
         st.session_state.chat_thread_counter = user_data.get(
             "chat_thread_counter", 0
         )
@@ -121,6 +146,21 @@ def init_session_state(username: str) -> None:
         st.session_state.file_uploader_key = 0
         st.session_state.journal_form_key = 0
         st.session_state.editing_entry = None
+        st.session_state.editing_visit = None
+        st.session_state.editing_vaccination = None
+        st.session_state.editing_prescription = None
+        st.session_state.editing_rx_drug = None
+        st.session_state.editing_lab_test = None
+        st.session_state.editing_lab_item = None
+        st.session_state.pending_rx_drugs = []
+        st.session_state.pending_lab_items = []
+        st.session_state.mv_form_key = 0
+        st.session_state.vax_form_key = 0
+        st.session_state.rx_form_key = 0
+        st.session_state.rx_drug_key = 0
+        st.session_state.lab_form_key = 0
+        st.session_state.lab_item_key = 0
+        st.session_state.lab_file_key = 0
         st.session_state.conversation_history = []
         st.session_state.agent_messages = []
         st.session_state.question_counter = 0
@@ -130,10 +170,29 @@ def init_session_state(username: str) -> None:
         "file_uploader_key": 0,
         "journal_form_key": 0,
         "editing_entry": None,
+        "editing_visit": None,
+        "editing_vaccination": None,
+        "editing_prescription": None,
+        "editing_rx_drug": None,
+        "editing_lab_test": None,
+        "editing_lab_item": None,
+        "pending_rx_drugs": [],
+        "pending_lab_items": [],
+        "mv_form_key": 0,
+        "vax_form_key": 0,
+        "rx_form_key": 0,
+        "rx_drug_key": 0,
+        "lab_form_key": 0,
+        "lab_item_key": 0,
+        "lab_file_key": 0,
+        "vaccinations": [],
+        "prescriptions": [],
+        "lab_tests": [],
         "conversation_history": [],
         "agent_messages": [],
         "question_counter": 0,
         "bp_readings": [],
+        "medical_visits": [],
         "chat_thread_counter": 0,
     }
     for key, default in defaults.items():
