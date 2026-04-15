@@ -17,6 +17,7 @@ from typing import Any
 from langchain_core.tools import tool, BaseTool
 from langchain_openai import ChatOpenAI
 from serpapi import GoogleSearch
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from core.prompts import SUMMARY_PROMPT, LAB_ANALYSIS_PROMPT
 from core.vector_store import normalize_source_path
@@ -80,6 +81,26 @@ def create_tools(
             logger.error("Knowledge base search failed: %s", e)
             return f"Knowledge base search encountered an error: {e}"
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
+    def _serpapi_search(params: dict[str, str]) -> dict:
+        """Execute a SerpAPI search with retry on transient failures.
+
+        Retries up to 3 times with exponential backoff (1s, 2s, 4s…
+        capped at 10s).  ``reraise=True`` ensures the final exception
+        propagates to the caller's try/except if all attempts fail.
+
+        Args:
+            params: The SerpAPI query parameters.
+
+        Returns:
+            The raw search results dictionary.
+        """
+        return GoogleSearch(params).get_dict()
+
     @tool
     def search_web(query: str) -> str:
         """Search the web for health information. Use this when the knowledge
@@ -92,7 +113,7 @@ def create_tools(
             "api_key": serpapi_key,
         }
         try:
-            result = GoogleSearch(params).get_dict()
+            result = _serpapi_search(params)
             snippets: list[str] = []
             for item in result.get("organic_results", [])[:3]:
                 title = item.get("title", "")
@@ -108,7 +129,7 @@ def create_tools(
             logger.info("Web search returned %d results", len(snippets))
             return "\n\n".join(snippets)
         except Exception as e:
-            logger.error("Web search failed: %s", e)
+            logger.error("Web search failed after retries: %s", e)
             return f"Web search failed: {e}"
 
     @tool

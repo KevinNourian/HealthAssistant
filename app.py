@@ -172,6 +172,7 @@ def initialize_llm() -> ChatOpenAI:
     return ChatOpenAI(
         model=config["llm"]["model"],
         temperature=config["llm"]["temperature"],
+        request_timeout=30,
     )
 
 

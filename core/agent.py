@@ -150,13 +150,20 @@ def build_graph(
                 break
 
         # Grade the retrieval with a lightweight LLM call.
-        grade_prompt = RETRIEVAL_GRADING_PROMPT.format(
-            question=user_question,
-            documents=kb_result[:1000],
-        )
-        grade_response = llm.invoke(grade_prompt)
-        grade = grade_response.content.strip().upper()
-        logger.info("Retrieval grading result: '%s'", grade)
+        # If grading fails, skip guidance and let the agent proceed
+        # with the tool results as-is — a grading error should never
+        # crash the entire conversation turn.
+        try:
+            grade_prompt = RETRIEVAL_GRADING_PROMPT.format(
+                question=user_question,
+                documents=kb_result[:1000],
+            )
+            grade_response = llm.invoke(grade_prompt)
+            grade = grade_response.content.strip().upper()
+            logger.info("Retrieval grading result: '%s'", grade)
+        except Exception as exc:
+            logger.error("Retrieval grading failed — skipping: %s", exc)
+            return {}
 
         if grade.startswith("YES"):
             return {}
