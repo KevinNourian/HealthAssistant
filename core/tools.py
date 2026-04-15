@@ -248,10 +248,17 @@ def create_tools(
             return (
                 f"Blood pressure readings ({len(bp_readings_ref)} total):\n"
                 + "\n".join(lines)
-                + "\n\nNote: Present these readings factually. Do not "
-                "classify them into medical categories or suggest they "
-                "indicate any condition. Remind the user to consult "
-                "their healthcare provider for interpretation."
+                + "\n\nWhen presenting these readings, include a brief "
+                "interpretation for each using standard AHA categories: "
+                "Normal (<120/<80), Elevated (120-129/<80), "
+                "High Blood Pressure Stage 1 (130-139 or 80-89), "
+                "High Blood Pressure Stage 2 (≥140 or ≥90), "
+                "Hypertensive Crisis (>180 and/or >120). "
+                "Also note any trends (improving, worsening, stable). "
+                "If pulse is present, note if it is within a normal "
+                "resting range (60-100 BPM). "
+                "End with a reminder that this is general guidance "
+                "and not a substitute for professional medical advice."
             )
         except Exception as e:
             logger.error("Blood pressure data retrieval failed: %s", e)
