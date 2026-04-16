@@ -88,5 +88,33 @@ class TestValidateApiKeys:
     def test_missing_serpapi_key_warns_but_passes(self, monkeypatch) -> None:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
         monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+        monkeypatch.delenv("LANGCHAIN_TRACING_V2", raising=False)
         # Should not raise — SERPAPI is optional.
         validate_api_keys()
+
+    def test_langsmith_tracing_enabled_with_key(self, monkeypatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+        monkeypatch.setenv("LANGCHAIN_API_KEY", "lsv2_test_key")
+        # Should not raise — both tracing vars are set.
+        validate_api_keys()
+
+    def test_langsmith_tracing_enabled_without_key_warns(self, monkeypatch, caplog) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+        monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+        # Should not raise, but should log a warning.
+        import logging
+        with caplog.at_level(logging.WARNING, logger="core.config"):
+            validate_api_keys()
+        assert "LANGCHAIN_API_KEY is not set" in caplog.text
+
+    def test_langsmith_tracing_disabled_no_warning(self, monkeypatch, caplog) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        monkeypatch.delenv("LANGCHAIN_TRACING_V2", raising=False)
+        monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+        # No warning about LangSmith when tracing is not enabled.
+        import logging
+        with caplog.at_level(logging.WARNING, logger="core.config"):
+            validate_api_keys()
+        assert "LANGCHAIN_API_KEY" not in caplog.text

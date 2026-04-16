@@ -3,8 +3,10 @@ Vector store management using Chroma.
 Handles PDF loading, chunking, embedding, and persistence.
 """
 
+import logging
 import os
 import shutil
+import time
 from typing import Dict, List, Set
 from pathlib import Path
 
@@ -16,6 +18,8 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+
+logger = logging.getLogger(__name__)
 
 
 # ────────────────────────────────────────────────────────────
@@ -396,7 +400,11 @@ def get_hybrid_retriever(
         A ``HybridRetriever`` that merges BM25 and vector
         search results.
     """
-    # Fetch all chunks from Chroma to build the BM25 index
+    # Fetch all chunks from Chroma to build the BM25 index.
+    # This is a one-time cost per server start (cached by
+    # @st.cache_resource in app.py), but scales with collection
+    # size — the timing log makes that cost visible.
+    start = time.time()
     result = vectorstore.get(include=["documents", "metadatas"])
     docs = [
         Document(page_content=text, metadata=meta)
@@ -406,6 +414,12 @@ def get_hybrid_retriever(
     # BM25: keyword/lexical retriever (in-memory)
     bm25_retriever = BM25Retriever.from_documents(docs)
     bm25_retriever.k = k
+    elapsed = time.time() - start
+    logger.info(
+        "BM25 index built in %.2f seconds (%d documents)",
+        elapsed,
+        len(docs),
+    )
 
     # Vector: semantic retriever backed by Chroma
     vector_retriever = vectorstore.as_retriever(search_kwargs={"k": k})

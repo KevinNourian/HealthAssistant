@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(.venv/Scripts/python -m pytest tests/ -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/test_agent.py -v)"
+      "Bash(.venv/Scripts/python -m pytest tests/test_agent.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_config.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -q)"
     ]
   }
 }

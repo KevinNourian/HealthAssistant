@@ -67,8 +67,8 @@ def load_config(config_path: str = "config.json") -> dict[str, Any]:
 def validate_api_keys() -> None:
     """Validate that required API keys are present in the environment.
 
-    Reads ``OPENAI_API_KEY`` and ``SERPAPI_API_KEY`` from environment
-    variables.
+    Reads ``OPENAI_API_KEY``, ``SERPAPI_API_KEY``, and the LangSmith
+    tracing variables from the environment.
 
     Raises:
         EnvironmentError: If ``OPENAI_API_KEY`` is missing or does not
@@ -90,8 +90,22 @@ def validate_api_keys() -> None:
         logger.warning(
             "SERPAPI_API_KEY is not set — the web search tool will be unavailable"
         )
+
+    tracing_enabled = os.getenv("LANGCHAIN_TRACING_V2", "").strip().lower() == "true"
+    langsmith_key = os.getenv("LANGCHAIN_API_KEY", "").strip()
+
+    if tracing_enabled and not langsmith_key:
+        logger.warning(
+            "LANGCHAIN_TRACING_V2 is enabled but LANGCHAIN_API_KEY is not set "
+            "— tracing will fail. Add LANGCHAIN_API_KEY to your .env file "
+            "or disable tracing by removing LANGCHAIN_TRACING_V2."
+        )
+    elif tracing_enabled and langsmith_key:
+        logger.info("LangSmith tracing is enabled")
     else:
-        logger.info("API key validation passed")
+        logger.info("LangSmith tracing is not enabled")
+
+    logger.info("API key validation passed")
 
 
 def save_config(

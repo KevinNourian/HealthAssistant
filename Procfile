@@ -1,0 +1,1 @@
+web: mkdir -p /data/chroma_db /data/user_data && rm -rf ./data/chroma_db ./user_data ./checkpoints.db && ln -sfn /data/chroma_db ./data/chroma_db && ln -sfn /data/user_data ./user_data && ln -sfn /data/checkpoints.db ./checkpoints.db && streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
