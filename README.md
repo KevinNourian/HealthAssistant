@@ -299,39 +299,6 @@ uv run pytest
 
 **Testing approach:** LLM calls are replaced with `MockLLM` and `ErrorLLM` fixtures that return predetermined responses, making tests deterministic and free. The end-to-end graph tests use real LangGraph execution with fake LLMs — the closest to a real invocation without hitting any API.
 
-## Deployment
-
-### Railway (recommended)
-
-Railway provides persistent disk storage, which is required for Chroma, SQLite checkpoints, and user data to survive restarts.
-
-1. Create a project at [railway.app](https://railway.app) and connect your GitHub repo
-2. Add environment variables in the Variables tab:
-   ```
-   OPENAI_API_KEY=your_openai_api_key
-   SERPAPI_API_KEY=your_serpapi_api_key
-   PORT=8501
-   ```
-3. Attach a persistent volume with mount path `/data`
-4. Deploy — the `Procfile` handles symlinking the persistent volume to the app's data paths automatically
-
-On first deploy the vectorstore is built from the PDFs in `data/` and written to the persistent volume. All subsequent deploys load it instantly.
-
-### Streamlit Community Cloud (free, limited persistence)
-
-Suitable for demos and portfolio projects where data persistence across restarts is not required.
-
-1. Push your repo to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repo
-3. Add secrets in the dashboard (Settings → Secrets):
-   ```toml
-   OPENAI_API_KEY = "your_openai_api_key"
-   SERPAPI_API_KEY = "your_serpapi_api_key"
-   ```
-4. Deploy
-
-**Note:** The `data/chroma_db/` directory must be committed to the repo so the vectorstore loads on startup. User data (blood pressure readings, journal entries, etc.) and conversation history will reset on container restart.
-
 ## Observability with LangSmith
 
 [LangSmith](https://smith.langchain.com) is an observability platform built by the LangChain team. When enabled, it automatically captures a full trace of every agent run — every LLM call, tool invocation, retrieval result, and token count — with latency breakdowns and input/output inspection. This requires zero code changes.
