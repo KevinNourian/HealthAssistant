@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/LangChain-0.1+-1C3C3C?logo=langchain&logoColor=white" alt="LangChain" />
   <img src="https://img.shields.io/badge/ChromaDB-0.4+-00A67E" alt="ChromaDB" />
   <img src="https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white" alt="OpenAI" />
+  <img src="https://img.shields.io/badge/LangSmith-Tracing-FF6B35" alt="LangSmith" />
 </p>
 
 ---
@@ -328,6 +329,35 @@ Suitable for demos and portfolio projects where data persistence across restarts
 4. Deploy
 
 **Note:** The `data/chroma_db/` directory must be committed to the repo so the vectorstore loads on startup. User data (blood pressure readings, journal entries, etc.) and conversation history will reset on container restart.
+
+## Observability with LangSmith
+
+[LangSmith](https://smith.langchain.com) is an observability platform built by the LangChain team. When enabled, it automatically captures a full trace of every agent run — every LLM call, tool invocation, retrieval result, and token count — with latency breakdowns and input/output inspection. This requires zero code changes.
+
+### What you can see in LangSmith
+
+- The full agent decision chain for each user query
+- Which tools were called and in what order
+- Exact inputs and outputs of every LLM call (including the grading node)
+- Token usage and latency per node
+- Retrieval quality — what documents were returned and whether the grader accepted them
+
+### How to enable it
+
+1. Create a free account at [smith.langchain.com](https://smith.langchain.com)
+2. Generate an API key from your account settings
+3. Add to your `.env` file (local) or Railway Variables tab (deployed):
+
+```env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key
+```
+
+That's all. On the next app start, every graph invocation appears in your LangSmith dashboard automatically. The app's `validate_api_keys()` will warn at startup if tracing is enabled but the API key is missing.
+
+### Free tier
+
+LangSmith's free tier includes 5,000 traces per month — more than enough for personal use.
 
 ## Built With
 
