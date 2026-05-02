@@ -252,6 +252,8 @@ User Question
    Response with sources & token usage
 ```
 
+> When LangSmith tracing is enabled, every node in this graph (agent, tools, grade_retrieval) is automatically captured with inputs, outputs, and latency. See the [Observability with LangSmith](#observability-with-langsmith) section to enable it.
+
 ## Safety
 
 Health Assistant includes multiple safety layers:
