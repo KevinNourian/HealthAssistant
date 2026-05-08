@@ -71,16 +71,16 @@ def load_pdfs(pdf_paths: List[str]) -> List[Document]:
 
     for pdf_path in pdf_paths:
         if not os.path.exists(pdf_path):
-            print(f"Warning: PDF not found: {pdf_path}")
+            logger.warning("PDF not found: %s", pdf_path)
             continue
 
         try:
             loader = PyPDFLoader(pdf_path)
             docs = loader.load()
             all_docs.extend(docs)
-            print(f"Loaded {len(docs)} pages from {pdf_path}")
+            logger.info("Loaded %d pages from %s", len(docs), pdf_path)
         except Exception as e:
-            print(f"Error loading {pdf_path}: {e}")
+            logger.error("Error loading %s: %s", pdf_path, e)
 
     return all_docs
 
@@ -97,7 +97,7 @@ def chunk_documents(
     )
 
     chunks = splitter.split_documents(documents)
-    print(f"Created {len(chunks)} chunks from {len(documents)} documents")
+    logger.info("Created %d chunks from %d documents", len(chunks), len(documents))
 
     return chunks
 
@@ -130,8 +130,7 @@ def create_chroma_vectorstore(
         persist_directory=persist_directory,
     )
 
-    print(f"Created Chroma vector store with {len(chunks)} chunks")
-    print(f"Saved to {persist_directory}")
+    logger.info("Created Chroma vector store with %d chunks at %s", len(chunks), persist_directory)
 
     return vectorstore
 
@@ -158,7 +157,7 @@ def load_chroma_vectorstore(
         embedding_function=embeddings,
     )
 
-    print(f"Loaded Chroma vector store from {persist_directory}")
+    logger.info("Loaded Chroma vector store from %s", persist_directory)
 
     return vectorstore
 
@@ -208,16 +207,16 @@ def get_or_create_vectorstore(
 
     # Try to load existing vector store
     if not force_recreate and vectorstore_exists(persist_directory):
-        print("Loading existing vector store...")
+        logger.info("Loading existing vector store")
         return load_chroma_vectorstore(persist_directory, embeddings)
 
     # Force recreate: delete old data first
     if force_recreate and vectorstore_exists(persist_directory):
-        print("Clearing existing vector store for full rebuild...")
+        logger.info("Clearing existing vector store for full rebuild")
         shutil.rmtree(persist_directory, ignore_errors=True)
 
     # Create new vector store
-    print("Creating new vector store...")
+    logger.info("Creating new vector store")
 
     # Load PDFs
     docs = load_pdfs(pdf_paths)
@@ -255,7 +254,7 @@ def add_pdf_to_vectorstore(
     if docs:
         chunks = chunk_documents(docs, chunk_size, chunk_overlap)
         vectorstore.add_documents(chunks)
-        print(f"Added {len(chunks)} chunks from {pdf_path}")
+        logger.info("Added %d chunks from %s", len(chunks), pdf_path)
 
 
 def remove_pdf_from_vectorstore(
@@ -269,9 +268,9 @@ def remove_pdf_from_vectorstore(
     ids_to_delete = source_to_ids.get(norm_path, [])
     if ids_to_delete:
         vectorstore.delete(ids=ids_to_delete)
-        print(f"Removed {len(ids_to_delete)} chunks for {pdf_path}")
+        logger.info("Removed %d chunks for %s", len(ids_to_delete), pdf_path)
     else:
-        print(f"No chunks found for {pdf_path}")
+        logger.info("No chunks found for %s", pdf_path)
 
 
 def sync_vectorstore(
@@ -302,7 +301,7 @@ def sync_vectorstore(
     for source in to_remove:
         ids = source_to_ids[source]
         vectorstore.delete(ids=ids)
-        print(f"Sync: removed {len(ids)} chunks for {source}")
+        logger.info("Sync: removed %d chunks for %s", len(ids), source)
 
     # Embed new documents
     if to_add:
@@ -311,12 +310,10 @@ def sync_vectorstore(
         if docs:
             chunks = chunk_documents(docs, chunk_size, chunk_overlap)
             vectorstore.add_documents(chunks)
-            print(
-                f"Sync: added {len(chunks)} chunks for {len(paths_to_load)} new PDF(s)"
-            )
+            logger.info("Sync: added %d chunks for %d new PDF(s)", len(chunks), len(paths_to_load))
 
     if not to_add and not to_remove:
-        print("Vectorstore is already in sync.")
+        logger.info("Vectorstore is already in sync")
 
 
 def get_retriever(vectorstore: Chroma, k: int = 3):
